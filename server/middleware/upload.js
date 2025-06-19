@@ -47,7 +47,7 @@ const localStorage = multer.diskStorage({
 const cloudinaryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'instagram-clone',
+    folder: 'nuvue',
     allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov', 'avi'],
     resource_type: 'auto', // Handles both images and videos
     transformation: [

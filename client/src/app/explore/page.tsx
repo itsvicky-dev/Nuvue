@@ -156,19 +156,6 @@ export default function ExplorePage() {
         {/* Main content */}
         <main className="flex-1 md:ml-64">
           <div className="max-w-4xl mx-auto py-4 px-4">
-            {/* Search Bar */}
-            <div className="mb-6">
-              <div className="relative">
-                <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search posts, users, hashtags..."
-                  className="w-full pl-10 pr-4 py-3 bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-ig-blue focus:border-transparent"
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
-                />
-              </div>
-            </div>
 
             {/* Content */}
             {isLoading ? (
@@ -284,7 +271,7 @@ export default function ExplorePage() {
                       Follow some users to see their posts here, or check back later for trending content.
                     </p>
                     <button 
-                      onClick={fetchExplorePosts}
+                      onClick={() => fetchExplorePosts()}
                       className="btn-primary px-4 py-2"
                     >
                       Refresh

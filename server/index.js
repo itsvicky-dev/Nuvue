@@ -15,6 +15,7 @@ import { dirname, join } from 'path';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import postRoutes from './routes/posts.js';
+import reelRoutes from './routes/reels.js';
 import storyRoutes from './routes/stories.js';
 import messageRoutes from './routes/messages.js';
 import notificationRoutes from './routes/notifications.js';
@@ -93,6 +94,7 @@ const uploadLimiter = rateLimit({
 app.use('/api/', limiter);
 app.use('/api/upload', uploadLimiter);
 app.use('/api/posts', uploadLimiter);
+app.use('/api/reels', uploadLimiter);
 app.use('/api/stories', uploadLimiter);
 
 // Body parsing middleware
@@ -106,21 +108,35 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/posts', postRoutes);
+app.use('/api/reels', reelRoutes);
 app.use('/api/stories', storyRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/upload', uploadRoutes);
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    cors: {
-      origin: process.env.CLIENT_URL || "http://localhost:3000"
-    }
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    // Test database connection
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    
+    res.status(200).json({ 
+      status: 'OK',
+      database: dbStatus,
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      cors: {
+        origin: process.env.CLIENT_URL || "http://localhost:3000"
+      },
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Debug CORS endpoint
@@ -182,7 +198,7 @@ io.on('connection', (socket) => {
 
 // Database connection and server startup
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/instagram-clone';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/nuvue';
 
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,

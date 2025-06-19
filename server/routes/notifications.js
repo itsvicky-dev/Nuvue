@@ -116,6 +116,43 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// Test endpoint to create sample notifications (remove in production)
+router.post('/test', auth, async (req, res) => {
+  try {
+    const io = req.app.get('io');
+    
+    // Create a like notification
+    await createNotification(io, {
+      recipient: req.userId,
+      sender: req.userId, // Using self for testing
+      type: 'like',
+      message: 'Test user liked your post'
+    });
+    
+    // Create a follow notification
+    await createNotification(io, {
+      recipient: req.userId,
+      sender: req.userId, // Using self for testing
+      type: 'follow',
+      message: 'Test user started following you'
+    });
+    
+    // Create a comment notification
+    await createNotification(io, {
+      recipient: req.userId,
+      sender: req.userId, // Using self for testing
+      type: 'comment',
+      message: 'Test user commented on your post',
+      comment: 'This is a test comment!'
+    });
+
+    res.json({ message: 'Test notifications created' });
+  } catch (error) {
+    console.error('Create test notifications error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Helper function to create and emit notification
 export const createNotification = async (io, data) => {
   try {

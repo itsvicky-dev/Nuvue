@@ -84,8 +84,24 @@ const userSchema = new mongoose.Schema({
     ref: 'User'
   }],
   
+  // Saved Posts
+  savedPosts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Post'
+  }],
+  
+  // Saved Reels
+  savedReels: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Reel'
+  }],
+  
   // Statistics
   postsCount: {
+    type: Number,
+    default: 0
+  },
+  reelsCount: {
     type: Number,
     default: 0
   },

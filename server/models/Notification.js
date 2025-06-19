@@ -14,7 +14,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['like', 'comment', 'follow', 'mention'],
+    enum: ['like', 'comment', 'follow', 'follow_request', 'follow_accept', 'mention'],
     required: true
   },
   message: {
@@ -69,6 +69,29 @@ notificationSchema.statics.createNotification = async function(data) {
 // Static method to get unread count
 notificationSchema.statics.getUnreadCount = async function(userId) {
   return this.countDocuments({ recipient: userId, isRead: false });
+};
+
+// Static method to clean up duplicate follow request notifications
+notificationSchema.statics.cleanupDuplicateFollowRequests = async function(recipientId, senderId) {
+  try {
+    // Find all follow request notifications from this sender to this recipient
+    const notifications = await this.find({
+      recipient: recipientId,
+      sender: senderId,
+      type: 'follow_request'
+    }).sort({ createdAt: -1 });
+
+    // If there are multiple notifications, keep only the latest one
+    if (notifications.length > 1) {
+      const notificationsToDelete = notifications.slice(1); // Keep the first (latest) one
+      const idsToDelete = notificationsToDelete.map(n => n._id);
+      
+      await this.deleteMany({ _id: { $in: idsToDelete } });
+      console.log(`Cleaned up ${idsToDelete.length} duplicate follow request notifications`);
+    }
+  } catch (error) {
+    console.error('Error cleaning up duplicate notifications:', error);
+  }
 };
 
 const Notification = mongoose.model('Notification', notificationSchema);

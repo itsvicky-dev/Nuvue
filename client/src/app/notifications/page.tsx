@@ -8,10 +8,12 @@ import { Sidebar } from '@/components/Layout/Sidebar';
 import { MobileNavbar } from '@/components/Layout/MobileNavbar';
 import { Heart, MessageCircle, User, UserPlus, Settings } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import NotificationPermission from '@/components/NotificationPermission';
+import NotificationSettings from '@/components/NotificationSettings';
 
 interface Notification {
   id: string;
-  type: 'like' | 'comment' | 'follow' | 'mention';
+  type: 'like' | 'comment' | 'follow' | 'mention' | 'follow_request';
   user: {
     username: string;
     avatar: string;
@@ -21,15 +23,28 @@ interface Notification {
   postImage?: string;
   timestamp: string;
   isRead: boolean;
+  isFollowedBack?: boolean; // Track if user has been followed back
+  isAccepted?: boolean; // Track if follow request has been accepted
+  isRejected?: boolean; // Track if follow request has been rejected
 }
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'following' | 'you'>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   
   const { user } = useAuth();
   const { socket } = useSocket();
+
+  // Auto-hide toast after 3 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   useEffect(() => {
     fetchNotifications();
@@ -52,49 +67,121 @@ export default function NotificationsPage() {
         content: notificationData.message || '',
         postImage: notificationData.post?.media?.[0]?.url || '',
         timestamp: formatDistanceToNow(new Date(notificationData.createdAt), { addSuffix: true }),
-        isRead: false
+        isRead: false,
+        isFollowedBack: false,
+        isAccepted: false,
+        isRejected: false
       };
 
-      setNotifications(prev => [formattedNotification, ...prev]);
+      // For follow requests, check if we already have one from this user
+      if (formattedNotification.type === 'follow_request') {
+        setNotifications(prev => {
+          // Remove any existing follow request notifications from this user first
+          const filtered = prev.filter(notif => !(
+            notif.type === 'follow_request' && 
+            notif.user.username === formattedNotification.user.username
+          ));
+          // Then add the new one
+          return [formattedNotification, ...filtered];
+        });
+      } else {
+        setNotifications(prev => [formattedNotification, ...prev]);
+      }
+    };
+
+    const handleNotificationRemoved = (data: { type: string; senderId: string; senderUsername: string }) => {
+      console.log('Notification removal received:', data);
+      
+      // Remove all notifications of the specified type from the specified sender
+      setNotifications(prev => 
+        prev.filter(notif => !(
+          notif.type === data.type && 
+          notif.user.username === data.senderUsername
+        ))
+      );
     };
 
     socket.on('notification', handleNewNotification);
+    socket.on('notificationRemoved', handleNotificationRemoved);
 
     return () => {
       socket.off('notification', handleNewNotification);
+      socket.off('notificationRemoved', handleNotificationRemoved);
     };
   }, [socket, user]);
 
   const fetchNotifications = async () => {
     try {
       setIsLoading(true);
+      console.log('🔄 Fetching notifications...');
+      
       const response = await api.get('/notifications');
-      console.log('Notifications API response:', response.data);
+      console.log('✅ Notifications API response:', response.data);
+      
       const notificationsData = response.data.notifications || [];
-      console.log('Notifications data:', notificationsData);
+      console.log('📧 Notifications data:', notificationsData);
       
       const formattedNotifications: Notification[] = notificationsData.map((notif: any) => {
-        console.log('Processing notification:', notif);
+        console.log('🔄 Processing notification:', notif);
         return {
           id: notif._id,
           type: notif.type,
           user: {
             username: notif.from?.username || 'unknown',
-            avatar: notif.from?.profilePicture || '/default-avatar.png',
+            avatar: notif.from?.profilePicture || '/assets/images/default-avatar.png',
             fullName: notif.from?.fullName || notif.from?.username || 'Unknown User'
           },
           content: notif.message || '',
           postImage: notif.post?.media?.[0]?.url || '',
           timestamp: formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true }),
-          isRead: notif.isRead || false
+          isRead: notif.isRead || false,
+          isFollowedBack: false,
+          isAccepted: false,
+          isRejected: false
         };
       });
       
-      console.log('Formatted notifications:', formattedNotifications);
-      setNotifications(formattedNotifications);
+      console.log('✅ Formatted notifications:', formattedNotifications);
+      
+      // Remove duplicate follow request notifications (keep only the latest one per user)
+      const cleanedNotifications = formattedNotifications.reduce((acc: Notification[], current: Notification) => {
+        if (current.type === 'follow_request') {
+          // Check if we already have a follow request from this user
+          const existingIndex = acc.findIndex(notif => 
+            notif.type === 'follow_request' && 
+            notif.user.username === current.user.username
+          );
+          
+          if (existingIndex >= 0) {
+            // Replace with the newer one (current is newer since array is sorted by createdAt desc)
+            acc[existingIndex] = current;
+          } else {
+            acc.push(current);
+          }
+        } else {
+          acc.push(current);
+        }
+        return acc;
+      }, []);
+      
+      setNotifications(cleanedNotifications);
       setIsLoading(false);
-    } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+    } catch (error: any) {
+      console.error('❌ Failed to fetch notifications:', error);
+      
+      // Check if it's an authentication error
+      if (error.response?.status === 401) {
+        console.error('🔐 Authentication failed - redirecting to login');
+        // The API client should handle this automatically, but let's be explicit
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return;
+      }
+      
+      // Show user-friendly error message
+      const errorMessage = error.response?.data?.message || 'Failed to load notifications';
+      setToast({ message: errorMessage, type: 'error' });
+      
       setNotifications([]);
       setIsLoading(false);
     }
@@ -124,6 +211,82 @@ export default function NotificationsPage() {
     }
   };
 
+  const handleFollowBack = async (username: string, notificationId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the parent click event
+    
+    try {
+      const response = await api.post(`/users/${username}/follow`);
+      console.log('Successfully followed user:', username, response.data);
+      
+      // Update the notification to show it's been followed back
+      setNotifications(prev =>
+        prev.map(notif =>
+          notif.id === notificationId 
+            ? { ...notif, isFollowedBack: true }
+            : notif
+        )
+      );
+      
+      // Also mark the notification as read since user interacted with it
+      await markAsRead(notificationId);
+      
+      // Show success toast
+      setToast({ message: `Now following @${username}`, type: 'success' });
+      
+    } catch (error) {
+      console.error('Failed to follow user:', error);
+      setToast({ message: 'Failed to follow user. Please try again.', type: 'error' });
+    }
+  };
+
+  const handleAcceptFollowRequest = async (username: string, notificationId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    try {
+      const response = await api.post(`/users/follow-requests/username/${username}/accept`);
+      console.log('Successfully accepted follow request:', username, response.data);
+      
+      // Remove all follow request notifications from this user
+      setNotifications(prev =>
+        prev.filter(notif => !(
+          notif.type === 'follow_request' && 
+          notif.user.username === username
+        ))
+      );
+      
+      // Show success toast
+      setToast({ message: `Accepted follow request from @${username}`, type: 'success' });
+      
+    } catch (error) {
+      console.error('Failed to accept follow request:', error);
+      setToast({ message: 'Failed to accept follow request. Please try again.', type: 'error' });
+    }
+  };
+
+  const handleRejectFollowRequest = async (username: string, notificationId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    try {
+      const response = await api.post(`/users/follow-requests/username/${username}/reject`);
+      console.log('Successfully rejected follow request:', username, response.data);
+      
+      // Remove all follow request notifications from this user
+      setNotifications(prev =>
+        prev.filter(notif => !(
+          notif.type === 'follow_request' && 
+          notif.user.username === username
+        ))
+      );
+      
+      // Show success toast
+      setToast({ message: `Rejected follow request from @${username}`, type: 'success' });
+      
+    } catch (error) {
+      console.error('Failed to reject follow request:', error);
+      setToast({ message: 'Failed to reject follow request. Please try again.', type: 'error' });
+    }
+  };
+
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'like':
@@ -132,6 +295,8 @@ export default function NotificationsPage() {
         return <MessageCircle size={20} className="text-blue-500" />;
       case 'follow':
         return <UserPlus size={20} className="text-green-500" />;
+      case 'follow_request':
+        return <UserPlus size={20} className="text-orange-500" />;
       case 'mention':
         return <User size={20} className="text-purple-500" />;
       default:
@@ -147,6 +312,8 @@ export default function NotificationsPage() {
         return 'commented on your post';
       case 'follow':
         return 'started following you';
+      case 'follow_request':
+        return 'requested to follow you';
       case 'mention':
         return 'mentioned you in a comment';
       default:
@@ -193,11 +360,17 @@ export default function NotificationsPage() {
                     Mark all as read
                   </button>
                 )}
-                <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <button 
+                  onClick={() => setShowSettings(true)}
+                  className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
                   <Settings size={20} />
                 </button>
               </div>
             </div>
+
+            {/* Notification Permission */}
+            <NotificationPermission />
 
             {/* Filter Tabs */}
             <div className="mb-6">
@@ -255,11 +428,11 @@ export default function NotificationsPage() {
                         {/* User Avatar */}
                         <div className="relative flex-shrink-0">
                           <img
-                            src={notification.user.avatar || '/default-avatar.png'}
+                            src={notification.user.avatar || '/assets/images/default-avatar.png'}
                             alt={notification.user.username}
                             className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = '/default-avatar.png';
+                              (e.target as HTMLImageElement).src = '/assets/images/default-avatar.png';
                             }}
                           />
                           <div className="absolute -bottom-1 -right-1 bg-white dark:bg-dark-surface rounded-full p-1">
@@ -276,15 +449,15 @@ export default function NotificationsPage() {
                                   {notification.user.username}
                                 </span>{' '}
                                 <span className="text-gray-600 dark:text-gray-400">
-                                  {notification.content || getNotificationText(notification)}
+                                  {notification.content ? 
+                                    // Use the message from backend if available
+                                    notification.content.replace(notification.user.username + ' ', '') 
+                                    : 
+                                    // Fallback to generated text
+                                    getNotificationText(notification)
+                                  }
                                 </span>
                               </p>
-                              
-                              {notification.type === 'comment' && notification.content && (
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 italic">
-                                  Comment: "{notification.content}"
-                                </p>
-                              )}
                             </div>
 
                             <div className="flex items-center space-x-3 ml-4">
@@ -311,9 +484,48 @@ export default function NotificationsPage() {
                       {/* Follow Button for follow notifications */}
                       {notification.type === 'follow' && (
                         <div className="mt-3 ml-13">
-                          <button className="btn-primary px-4 py-1 text-sm">
-                            Follow Back
+                          <button 
+                            onClick={(e) => handleFollowBack(notification.user.username, notification.id, e)}
+                            className={`px-4 py-1 text-sm transition-colors rounded-md ${
+                              notification.isFollowedBack
+                                ? 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed'
+                                : 'btn-primary hover:bg-ig-blue-hover'
+                            }`}
+                            disabled={notification.isFollowedBack}
+                          >
+                            {notification.isFollowedBack ? 'Following' : 'Follow Back'}
                           </button>
+                        </div>
+                      )}
+
+                      {/* Accept/Reject Buttons for follow request notifications */}
+                      {notification.type === 'follow_request' && !notification.isAccepted && !notification.isRejected && (
+                        <div className="mt-3 ml-13 flex space-x-2">
+                          <button 
+                            onClick={(e) => handleAcceptFollowRequest(notification.user.username, notification.id, e)}
+                            className="px-4 py-1 text-sm bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                          >
+                            Accept
+                          </button>
+                          <button 
+                            onClick={(e) => handleRejectFollowRequest(notification.user.username, notification.id, e)}
+                            className="px-4 py-1 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Status message for processed follow requests */}
+                      {notification.type === 'follow_request' && (notification.isAccepted || notification.isRejected) && (
+                        <div className="mt-3 ml-13">
+                          <span className={`px-4 py-1 text-sm rounded-md ${
+                            notification.isAccepted 
+                              ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                          }`}>
+                            {notification.isAccepted ? 'Accepted' : 'Rejected'}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -335,6 +547,21 @@ export default function NotificationsPage() {
       <div className="md:hidden">
         <MobileNavbar />
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white ${
+          toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
+      {/* Notification Settings Modal */}
+      <NotificationSettings 
+        isOpen={showSettings} 
+        onClose={() => setShowSettings(false)} 
+      />
     </div>
   );
 }

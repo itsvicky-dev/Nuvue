@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { AuthProvider } from './AuthProvider';
 import { ThemeProvider } from './ThemeProvider';
 import { SocketProvider } from './SocketProvider';
+import { NotificationProvider } from './NotificationProvider';
 import { ToastProvider } from '../ui/Toaster';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -23,7 +24,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ToastProvider>
           <AuthProvider>
             <SocketProvider>
-              {children}
+              <NotificationProvider>
+                {children}
+              </NotificationProvider>
             </SocketProvider>
           </AuthProvider>
         </ToastProvider>

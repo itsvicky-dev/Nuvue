@@ -51,7 +51,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="mx-auto h-12 w-auto flex justify-center">
-            <h1 className="text-3xl font-bold text-gradient">Instagram</h1>
+            <h1 className="text-3xl font-bold text-gradient">Nuvue</h1>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
             Sign in to your account

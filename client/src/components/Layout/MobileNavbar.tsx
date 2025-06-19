@@ -11,11 +11,13 @@ import {
   Search,
   PlusSquare,
   Heart,
-  User
+  User,
+  Play
 } from 'lucide-react';
 
 const navigationItems = [
   { href: '/', icon: Home, label: 'Home' },
+  { href: '/reels', icon: Play, label: 'Reels' },
   { href: '/search', icon: Search, label: 'Search' },
   { href: '/create', icon: PlusSquare, label: 'Create' },
   { href: '/notifications', icon: Heart, label: 'Notifications' },

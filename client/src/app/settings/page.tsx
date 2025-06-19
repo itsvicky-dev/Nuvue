@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/ui/Toaster';
 import { Sidebar } from '@/components/Layout/Sidebar';
@@ -17,16 +17,87 @@ import {
   HelpCircle,
   LogOut,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  Camera,
+  Lock,
+  Trash2,
+  AlertTriangle,
+  Save,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '@/components/providers/ThemeProvider';
+import { authApi, usersApi, uploadApi } from '@/lib/api';
+
+interface PasswordChangeForm {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+interface ProfileForm {
+  fullName: string;
+  bio: string;
+  website: string;
+}
+
+interface NotificationSettings {
+  likes: boolean;
+  comments: boolean;
+  follows: boolean;
+  messages: boolean;
+  posts: boolean;
+}
 
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
-  const { user, logout } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [profileForm, setProfileForm] = useState<ProfileForm>({
+    fullName: '',
+    bio: '',
+    website: ''
+  });
+  const [passwordForm, setPasswordForm] = useState<PasswordChangeForm>({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+    likes: true,
+    comments: true,
+    follows: true,
+    messages: true,
+    posts: true
+  });
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deactivatePassword, setDeactivatePassword] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user, logout, updateUser } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
+
+  // Initialize form data when user is available
+  React.useEffect(() => {
+    if (user) {
+      setProfileForm({
+        fullName: user.fullName || '',
+        bio: user.bio || '',
+        website: user.website || ''
+      });
+      setNotificationSettings(user.preferences?.notifications || {
+        likes: true,
+        comments: true,
+        follows: true,
+        messages: true,
+        posts: true
+      });
+      setIsPrivate(user.isPrivate || false);
+    }
+  }, [user]);
 
   const settingSections = [
     {
@@ -79,6 +150,244 @@ export default function SettingsPage() {
     }
   ];
 
+  const handleProfileImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Please select an image file.',
+        type: 'error'
+      });
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Please select an image smaller than 5MB.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('profilePicture', file);
+      formData.append('fullName', profileForm.fullName);
+      formData.append('bio', profileForm.bio);
+      formData.append('website', profileForm.website);
+
+      const response = await usersApi.updateProfile(formData);
+      updateUser(response.data.user);
+      
+      toast({
+        title: 'Profile updated',
+        description: 'Your profile picture has been updated successfully.',
+        type: 'success'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Update failed',
+        description: error.response?.data?.message || 'Failed to update profile picture.',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('fullName', profileForm.fullName);
+      formData.append('bio', profileForm.bio);
+      formData.append('website', profileForm.website);
+
+      const response = await usersApi.updateProfile(formData);
+      updateUser(response.data.user);
+      
+      toast({
+        title: 'Profile updated',
+        description: 'Your profile has been updated successfully.',
+        type: 'success'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Update failed',
+        description: error.response?.data?.message || 'Failed to update profile.',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast({
+        title: 'Password mismatch',
+        description: 'New passwords do not match.',
+        type: 'error'
+      });
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      toast({
+        title: 'Password too short',
+        description: 'Password must be at least 6 characters long.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authApi.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
+
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+
+      toast({
+        title: 'Password changed',
+        description: 'Your password has been changed successfully.',
+        type: 'success'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Password change failed',
+        description: error.response?.data?.message || 'Failed to change password.',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNotificationUpdate = async (key: keyof NotificationSettings, value: boolean) => {
+    const newSettings = { ...notificationSettings, [key]: value };
+    setNotificationSettings(newSettings);
+
+    try {
+      await authApi.updatePreferences({ notifications: newSettings });
+      toast({
+        title: 'Notifications updated',
+        description: 'Your notification preferences have been saved.',
+        type: 'success'
+      });
+    } catch (error: any) {
+      // Revert on error
+      setNotificationSettings(notificationSettings);
+      toast({
+        title: 'Update failed',
+        description: error.response?.data?.message || 'Failed to update notifications.',
+        type: 'error'
+      });
+    }
+  };
+
+  const handlePrivacyUpdate = async (newPrivacy: boolean) => {
+    try {
+      await usersApi.updatePrivacy(newPrivacy);
+      setIsPrivate(newPrivacy);
+      toast({
+        title: 'Privacy updated',
+        description: `Your account is now ${newPrivacy ? 'private' : 'public'}.`,
+        type: 'success'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Update failed',
+        description: error.response?.data?.message || 'Failed to update privacy settings.',
+        type: 'error'
+      });
+    }
+  };
+
+  const handleDeactivateAccount = async () => {
+    if (!deactivatePassword) {
+      toast({
+        title: 'Password required',
+        description: 'Please enter your password to deactivate your account.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authApi.deactivateAccount(deactivatePassword);
+      toast({
+        title: 'Account deactivated',
+        description: 'Your account has been deactivated.',
+        type: 'success'
+      });
+      logout();
+    } catch (error: any) {
+      toast({
+        title: 'Deactivation failed',
+        description: error.response?.data?.message || 'Failed to deactivate account.',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+      setShowDeactivateModal(false);
+      setDeactivatePassword('');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== 'DELETE') {
+      toast({
+        title: 'Confirmation required',
+        description: 'Please type DELETE to confirm account deletion.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authApi.deleteAccount({
+        password: deactivatePassword,
+        confirmation: deleteConfirmation
+      });
+      toast({
+        title: 'Account deleted',
+        description: 'Your account has been permanently deleted.',
+        type: 'success'
+      });
+      logout();
+    } catch (error: any) {
+      toast({
+        title: 'Deletion failed',
+        description: error.response?.data?.message || 'Failed to delete account.',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+      setShowDeleteModal(false);
+      setDeleteConfirmation('');
+      setDeactivatePassword('');
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -107,16 +416,38 @@ export default function SettingsPage() {
           Profile Information
         </h3>
         
-        <div className="space-y-4">
+        <form onSubmit={handleProfileUpdate} className="space-y-4">
           <div className="flex items-center space-x-4">
-            <img
-              src={user.avatar || 'https://picsum.photos/60/60?random=user'}
-              alt={user.username}
-              className="w-16 h-16 rounded-full"
+            <div className="relative">
+              <img
+                src={user.profilePicture || '/assets/images/default-avatar.png'}
+                alt={user.username}
+                className="w-16 h-16 rounded-full"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 p-1 bg-ig-blue text-white rounded-full hover:bg-blue-600 transition-colors"
+                disabled={loading}
+              >
+                <Camera size={12} />
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleProfileImageChange}
+              className="hidden"
             />
-            <button className="btn-secondary text-sm">
-              Change Photo
-            </button>
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                {user.username}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Click the camera icon to change your photo
+              </p>
+            </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -126,7 +457,7 @@ export default function SettingsPage() {
               </label>
               <input
                 type="text"
-                defaultValue={user.username}
+                value={user.username}
                 className="input"
                 disabled
               />
@@ -138,8 +469,10 @@ export default function SettingsPage() {
               </label>
               <input
                 type="text"
-                defaultValue={user.fullName}
+                value={profileForm.fullName}
+                onChange={(e) => setProfileForm(prev => ({ ...prev, fullName: e.target.value }))}
                 className="input"
+                required
               />
             </div>
             
@@ -149,8 +482,22 @@ export default function SettingsPage() {
               </label>
               <input
                 type="email"
-                defaultValue={user.email}
+                value={user.email}
                 className="input"
+                disabled
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Website
+              </label>
+              <input
+                type="url"
+                value={profileForm.website}
+                onChange={(e) => setProfileForm(prev => ({ ...prev, website: e.target.value }))}
+                className="input"
+                placeholder="https://example.com"
               />
             </div>
             
@@ -160,19 +507,28 @@ export default function SettingsPage() {
               </label>
               <textarea
                 rows={3}
-                defaultValue={user.bio}
+                value={profileForm.bio}
+                onChange={(e) => setProfileForm(prev => ({ ...prev, bio: e.target.value }))}
                 className="input resize-none"
                 placeholder="Tell us about yourself..."
+                maxLength={150}
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {profileForm.bio.length}/150 characters
+              </p>
             </div>
           </div>
           
           <div className="flex justify-end">
-            <button className="btn-primary">
-              Save Changes
+            <button 
+              type="submit" 
+              className="btn-primary"
+              disabled={loading}
+            >
+              {loading ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
-        </div>
+        </form>
       </div>
 
       <div className="bg-white dark:bg-dark-surface rounded-lg p-6 shadow-sm">
@@ -180,19 +536,134 @@ export default function SettingsPage() {
           Password & Security
         </h3>
         
+        <form onSubmit={handlePasswordChange} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Current Password
+            </label>
+            <input
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+              className="input"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              New Password
+            </label>
+            <input
+              type="password"
+              value={passwordForm.newPassword}
+              onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+              className="input"
+              minLength={6}
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Confirm New Password
+            </label>
+            <input
+              type="password"
+              value={passwordForm.confirmPassword}
+              onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+              className="input"
+              minLength={6}
+              required
+            />
+          </div>
+          
+          <div className="flex justify-end">
+            <button 
+              type="submit" 
+              className="btn-primary"
+              disabled={loading}
+            >
+              {loading ? 'Changing...' : 'Change Password'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
+  const renderNotificationSettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Push Notifications
+        </h3>
+        
         <div className="space-y-4">
+          {Object.entries(notificationSettings).map(([key, value]) => (
+            <div key={key} className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900 dark:text-white capitalize">
+                  {key}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Receive notifications for {key.toLowerCase()}
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={value}
+                  onChange={(e) => handleNotificationUpdate(key as keyof NotificationSettings, e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPrivacySettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Account Privacy
+        </h3>
+        
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                Private Account
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                When your account is private, only people you approve can see your photos and videos
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(e) => handlePrivacyUpdate(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-dark-surface rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Blocked Accounts
+        </h3>
+        
+        <div className="space-y-3">
           <button className="w-full text-left p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between">
-            <span className="text-gray-900 dark:text-white">Change Password</span>
-            <ChevronRight size={16} className="text-gray-400" />
-          </button>
-          
-          <button className="w-full text-left p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between">
-            <span className="text-gray-900 dark:text-white">Two-Factor Authentication</span>
-            <ChevronRight size={16} className="text-gray-400" />
-          </button>
-          
-          <button className="w-full text-left p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between">
-            <span className="text-gray-900 dark:text-white">Login Activity</span>
+            <span className="text-gray-900 dark:text-white">Manage Blocked Accounts</span>
             <ChevronRight size={16} className="text-gray-400" />
           </button>
         </div>
@@ -330,7 +801,19 @@ export default function SettingsPage() {
                       <span>Log Out</span>
                     </button>
                     
-                    <button className="flex items-center space-x-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">
+                    <button 
+                      onClick={() => setShowDeactivateModal(true)}
+                      className="flex items-center space-x-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                    >
+                      <Lock size={16} />
+                      <span>Deactivate Account</span>
+                    </button>
+                    
+                    <button 
+                      onClick={() => setShowDeleteModal(true)}
+                      className="flex items-center space-x-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                    >
+                      <Trash2 size={16} />
                       <span>Delete Account</span>
                     </button>
                   </div>
@@ -339,8 +822,11 @@ export default function SettingsPage() {
             ) : (
               <div>
                 {activeSection === 'account' && renderAccountSettings()}
+                {activeSection === 'notifications' && renderNotificationSettings()}
+                {activeSection === 'privacy' && renderPrivacySettings()}
                 {activeSection === 'appearance' && renderAppearanceSettings()}
-                {activeSection !== 'account' && activeSection !== 'appearance' && (
+                {(activeSection !== 'account' && activeSection !== 'notifications' && 
+                  activeSection !== 'privacy' && activeSection !== 'appearance') && (
                   <div className="bg-white dark:bg-dark-surface rounded-lg p-8 shadow-sm text-center">
                     <div className="text-gray-500 dark:text-gray-400">
                       <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -363,6 +849,140 @@ export default function SettingsPage() {
       <div className="md:hidden">
         <MobileNavbar />
       </div>
+
+      {/* Deactivate Account Modal */}
+      {showDeactivateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-dark-surface rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Deactivate Account
+              </h3>
+              <button
+                onClick={() => setShowDeactivateModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-400 mb-2">
+                <AlertTriangle size={20} />
+                <span className="font-medium">Warning</span>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Deactivating your account will hide your profile and content from other users. 
+                You can reactivate it anytime by logging in again.
+              </p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Enter your password to confirm
+              </label>
+              <input
+                type="password"
+                value={deactivatePassword}
+                onChange={(e) => setDeactivatePassword(e.target.value)}
+                className="input"
+                placeholder="Password"
+                required
+              />
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeactivateModal(false)}
+                className="flex-1 btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeactivateAccount}
+                className="flex-1 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
+                disabled={loading}
+              >
+                {loading ? 'Deactivating...' : 'Deactivate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-dark-surface rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Delete Account
+              </h3>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <div className="flex items-center space-x-2 text-red-600 dark:text-red-400 mb-2">
+                <AlertTriangle size={20} />
+                <span className="font-medium">Danger</span>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                This action cannot be undone. This will permanently delete your account and 
+                remove all your data from our servers.
+              </p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Enter your password
+              </label>
+              <input
+                type="password"
+                value={deactivatePassword}
+                onChange={(e) => setDeactivatePassword(e.target.value)}
+                className="input"
+                placeholder="Password"
+                required
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Type "DELETE" to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmation}
+                onChange={(e) => setDeleteConfirmation(e.target.value)}
+                className="input"
+                placeholder="DELETE"
+                required
+              />
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                disabled={loading}
+              >
+                {loading ? 'Deleting...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

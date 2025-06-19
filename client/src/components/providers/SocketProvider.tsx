@@ -64,6 +64,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       setIsConnected(false);
     });
 
+
+
     setSocket(newSocket);
 
     return () => {

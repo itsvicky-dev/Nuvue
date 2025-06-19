@@ -18,13 +18,15 @@ import {
   Settings,
   LogOut,
   Sun,
-  Moon
+  Moon,
+  Play
 } from 'lucide-react';
 
 const navigationItems = [
   { href: '/', icon: Home, label: 'Home' },
   { href: '/search', icon: Search, label: 'Search' },
   { href: '/explore', icon: Compass, label: 'Explore' },
+  { href: '/reels', icon: Play, label: 'Reels' },
   { href: '/notifications', icon: Heart, label: 'Notifications' },
   { href: '/create', icon: PlusSquare, label: 'Create' },
 ];
@@ -79,7 +81,7 @@ export function Sidebar() {
         {/* Logo */}
         <div className="p-6">
           <Link href="/" className="text-2xl font-bold text-gradient">
-            Instagram
+            Nuvue
           </Link>
         </div>
 

@@ -62,9 +62,9 @@ router.post('/register', [
     if (process.env.NODE_ENV === 'production') {
       await sendEmail({
         to: user.email,
-        subject: 'Verify your Instagram Clone account',
+        subject: 'Verify your Nuvue account',
         html: `
-          <h2>Welcome to Instagram Clone!</h2>
+          <h2>Welcome to Nuvue!</h2>
           <p>Please click the link below to verify your email address:</p>
           <a href="${process.env.CLIENT_URL}/verify-email?token=${emailToken}&email=${user.email}">
             Verify Email
@@ -203,7 +203,7 @@ router.post('/forgot-password', [
     if (process.env.NODE_ENV === 'production') {
       await sendEmail({
         to: user.email,
-        subject: 'Password Reset - Instagram Clone',
+        subject: 'Password Reset - Nuvue',
         html: `
           <h2>Password Reset Request</h2>
           <p>You requested a password reset. Click the link below to reset your password:</p>
@@ -282,6 +282,151 @@ router.post('/refresh', auth, async (req, res) => {
     res.json({ token });
   } catch (error) {
     console.error('Token refresh error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Change password
+router.post('/change-password', auth, [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify current password
+    const isValidPassword = await user.comparePassword(currentPassword);
+    if (!isValidPassword) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: 'Password changed successfully' });
+
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update user preferences
+router.put('/preferences', auth, [
+  body('theme').optional().isIn(['light', 'dark', 'auto']),
+  body('language').optional().isString(),
+  body('notifications').optional().isObject()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { theme, language, notifications } = req.body;
+    
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update preferences
+    if (theme !== undefined) user.preferences.theme = theme;
+    if (language !== undefined) user.preferences.language = language;
+    if (notifications !== undefined) {
+      user.preferences.notifications = { ...user.preferences.notifications, ...notifications };
+    }
+
+    await user.save();
+
+    res.json({ 
+      message: 'Preferences updated successfully',
+      preferences: user.preferences
+    });
+
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Deactivate account
+router.post('/deactivate', auth, [
+  body('password').notEmpty().withMessage('Password is required to deactivate account')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { password } = req.body;
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify password
+    const isValidPassword = await user.comparePassword(password);
+    if (!isValidPassword) {
+      return res.status(400).json({ message: 'Password is incorrect' });
+    }
+
+    // Deactivate account
+    user.isActive = false;
+    await user.save();
+
+    res.json({ message: 'Account deactivated successfully' });
+
+  } catch (error) {
+    console.error('Deactivate account error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete account permanently
+router.delete('/delete-account', auth, [
+  body('password').notEmpty().withMessage('Password is required to delete account'),
+  body('confirmation').equals('DELETE').withMessage('Please type DELETE to confirm')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { password } = req.body;
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify password
+    const isValidPassword = await user.comparePassword(password);
+    if (!isValidPassword) {
+      return res.status(400).json({ message: 'Password is incorrect' });
+    }
+
+    // Delete user account and all related data
+    await User.findByIdAndDelete(req.userId);
+
+    res.json({ message: 'Account deleted successfully' });
+
+  } catch (error) {
+    console.error('Delete account error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

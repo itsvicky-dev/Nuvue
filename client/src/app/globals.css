@@ -31,7 +31,6 @@
 }
 
 @layer components {
-  /* Instagram-like button */
   .btn-primary {
     @apply bg-ig-blue hover:bg-ig-blue-hover text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }

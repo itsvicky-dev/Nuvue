@@ -117,6 +117,18 @@ export const authApi = {
   
   resetPassword: (data: { token: string; email: string; password: string }) =>
     api.post('/auth/reset-password', data),
+
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.post('/auth/change-password', data),
+
+  updatePreferences: (data: { theme?: string; language?: string; notifications?: any }) =>
+    api.put('/auth/preferences', data),
+
+  deactivateAccount: (password: string) =>
+    api.post('/auth/deactivate', { password }),
+
+  deleteAccount: (data: { password: string; confirmation: string }) =>
+    api.delete('/auth/delete-account', { data }),
 };
 
 export const usersApi = {
@@ -137,11 +149,21 @@ export const usersApi = {
   
   getSuggestions: (limit = 10) =>
     api.get(`/users/suggestions?limit=${limit}`),
+
+  updatePrivacy: (isPrivate: boolean) =>
+    api.put('/users/privacy', { isPrivate }),
+
+  getBlockedUsers: () => api.get('/users/blocked'),
+
+  blockUser: (username: string) => api.post(`/users/${username}/block`),
 };
 
 export const postsApi = {
   getFeed: (page = 1, limit = 10) =>
     api.get(`/posts/feed?page=${page}&limit=${limit}`),
+    
+  getCombinedFeed: (page = 1, limit = 20) =>
+    api.get(`/posts/combined-feed?page=${page}&limit=${limit}`),
   
   getExplore: (page = 1, limit = 20) =>
     api.get(`/posts/explore?page=${page}&limit=${limit}`),
@@ -153,7 +175,7 @@ export const postsApi = {
   likePost: (id: string) => api.post(`/posts/${id}/like`),
   
   addComment: (id: string, text: string) =>
-    api.post(`/posts/${id}/comments`, { text }),
+    api.post(`/posts/${id}/comment`, { text }),
   
   getUserPosts: (username: string, page = 1) =>
     api.get(`/posts/user/${username}?page=${page}`),
@@ -162,6 +184,39 @@ export const postsApi = {
   
   editPost: (id: string, caption: string) => 
     api.put(`/posts/${id}`, { caption }),
+  
+  savePost: (id: string) => api.post(`/posts/${id}/save`),
+  
+  getSavedPosts: (page = 1) => api.get(`/posts/saved?page=${page}`),
+};
+
+export const reelsApi = {
+  getAllReels: (page = 1, limit = 50) =>
+    api.get(`/reels?page=${page}&limit=${limit}`),
+    
+  getExplore: (page = 1, limit = 20) =>
+    api.get(`/reels/explore?page=${page}&limit=${limit}`),
+  
+  getReel: (id: string) => api.get(`/reels/${id}`),
+  
+  createReel: (data: FormData) => api.uploadFile('/reels', data),
+  
+  likeReel: (id: string) => api.post(`/reels/${id}/like`),
+  
+  addComment: (id: string, text: string) =>
+    api.post(`/reels/${id}/comments`, { text }),
+  
+  getUserReels: (username: string, page = 1) =>
+    api.get(`/reels/user/${username}?page=${page}`),
+  
+  deleteReel: (id: string) => api.delete(`/reels/${id}`),
+  
+  editReel: (id: string, caption: string) => 
+    api.put(`/reels/${id}`, { caption }),
+  
+  saveReel: (id: string) => api.post(`/reels/${id}/save`),
+  
+  getSavedReels: (page = 1) => api.get(`/reels/saved?page=${page}`),
 };
 
 export const storiesApi = {

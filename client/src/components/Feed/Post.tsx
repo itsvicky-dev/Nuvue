@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useQueryClient } from '@tanstack/react-query';
 import { postsApi } from '@/lib/api';
 import { useToast } from '../ui/Toaster';
 import { getImageUrl, getProfilePictureUrl } from '@/utils/urls';
@@ -27,26 +28,60 @@ interface PostProps {
     comments: any[];
     createdAt: string;
     isLikedBy?: boolean;
+    isSaved?: boolean;
   };
 }
 
 export function Post({ post }: PostProps) {
   const [isLiked, setIsLiked] = useState(post.isLikedBy || false);
+  const [isSaved, setIsSaved] = useState(post.isSaved || false);
   const [likesCount, setLikesCount] = useState(post.likes.length);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [imageError, setImageError] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Sync local state with props when they change (e.g., after refresh or cache update)
+  useEffect(() => {
+    setIsLiked(post.isLikedBy || false);
+    setIsSaved(post.isSaved || false);
+    setLikesCount(post.likes.length);
+  }, [post.isLikedBy, post.isSaved, post.likes.length]);
 
   const handleLike = async () => {
     try {
       const response = await postsApi.likePost(post._id);
       setIsLiked(response.data.isLiked);
       setLikesCount(response.data.likesCount);
+      
+      // Invalidate the feed cache so the like state persists after refresh
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
     } catch (error) {
       toast({
         title: 'Error',
         description: 'Failed to like post',
+        type: 'error'
+      });
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      const response = await postsApi.savePost(post._id);
+      setIsSaved(response.data.isSaved);
+      
+      toast({
+        title: response.data.isSaved ? 'Post saved' : 'Post unsaved',
+        type: 'success'
+      });
+      
+      // Invalidate the feed cache
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to save post',
         type: 'error'
       });
     }
@@ -167,8 +202,11 @@ export function Post({ post }: PostProps) {
               <Send size={24} />
             </button>
           </div>
-          <button className="p-2 -m-2 text-gray-700 dark:text-gray-200 hover:text-gray-500 dark:hover:text-gray-400">
-            <Bookmark size={24} />
+          <button 
+            onClick={handleSave}
+            className={`p-2 -m-2 ${isSaved ? 'text-ig-blue' : 'text-gray-700 dark:text-gray-200'} hover:text-gray-500 dark:hover:text-gray-400`}
+          >
+            <Bookmark size={24} fill={isSaved ? 'currentColor' : 'none'} />
           </button>
         </div>
 
@@ -192,7 +230,7 @@ export function Post({ post }: PostProps) {
         )}
 
         {/* Comments */}
-        {post.comments.length > 0 && (
+        {Array.isArray(post.comments) && post.comments.length > 0 && (
           <button 
             onClick={() => setShowComments(!showComments)}
             className="text-sm text-gray-500 dark:text-gray-400 mb-2 hover:text-gray-700 dark:hover:text-gray-300"
@@ -201,15 +239,15 @@ export function Post({ post }: PostProps) {
           </button>
         )}
 
-        {showComments && (
+        {showComments && Array.isArray(post.comments) && (
           <div className="space-y-2 mb-3">
-            {post.comments.slice(0, 3).map((comment: any, index: number) => (
-              <div key={index} className="flex items-start space-x-2">
+            {post.comments.slice(0, 3).filter(comment => comment && typeof comment === 'object').map((comment: any, index: number) => (
+              <div key={comment._id || comment.id || index} className="flex items-start space-x-2">
                 <span className="font-semibold text-sm text-gray-900 dark:text-white">
-                  {comment.user.username}
+                  {comment.user?.username || comment.author?.username || 'Unknown User'}
                 </span>
                 <span className="text-sm text-gray-900 dark:text-white flex-1">
-                  {comment.text}
+                  {comment.text || ''}
                 </span>
               </div>
             ))}

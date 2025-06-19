@@ -9,7 +9,6 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Instagram brand colors
         'ig-blue': '#0095f6',
         'ig-blue-hover': '#1877f2',
         'ig-gray': '#8e8e8e',

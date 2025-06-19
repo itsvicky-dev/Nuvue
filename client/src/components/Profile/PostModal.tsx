@@ -34,8 +34,18 @@ export function PostModal({ isOpen, onClose, posts, initialPostIndex, onPostDele
     if (isOpen && posts[currentIndex]) {
       setCurrentPost(posts[currentIndex]);
       setIsLiked(posts[currentIndex].isLiked || false);
-      setLikesCount(posts[currentIndex].likes?.length || 0);
-      setComments(posts[currentIndex].comments || []);
+      
+      // Handle likes count - could be array or number
+      const postLikes = posts[currentIndex].likes;
+      const likesCount = Array.isArray(postLikes) ? postLikes.length : (typeof postLikes === 'number' ? postLikes : 0);
+      setLikesCount(likesCount);
+      
+      // Ensure comments is always an array of valid objects
+      const postComments = posts[currentIndex].comments || [];
+      const validComments = Array.isArray(postComments) 
+        ? postComments.filter(comment => comment && typeof comment === 'object')
+        : [];
+      setComments(validComments);
     }
   }, [isOpen, currentIndex, posts]);
 
@@ -66,7 +76,12 @@ export function PostModal({ isOpen, onClose, posts, initialPostIndex, onPostDele
     try {
       setIsSubmittingComment(true);
       const response = await postsApi.addComment(currentPost._id, newComment);
-      setComments(prev => [...prev, response.data.comment]);
+      
+      // Ensure the new comment is a valid object before adding it
+      const newCommentData = response.data.comment;
+      if (newCommentData && typeof newCommentData === 'object') {
+        setComments(prev => [...prev, newCommentData]);
+      }
       setNewComment('');
     } catch (error) {
       console.error('Failed to add comment:', error);
@@ -233,34 +248,51 @@ export function PostModal({ isOpen, onClose, posts, initialPostIndex, onPostDele
 
           {/* Comments */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {comments.map((comment, index) => (
-              <div key={index} className="flex space-x-3">
-                <div className="w-6 h-6 flex-shrink-0">
-                  {getProfilePictureUrl(comment.author?.profilePicture, comment.author?.username) ? (
-                    <img
-                      src={getProfilePictureUrl(comment.author?.profilePicture, comment.author?.username)!}
-                      alt={comment.author?.username}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                      <span className="text-xs font-bold text-gray-600 dark:text-gray-300">
-                        {comment.author?.username?.[0]?.toUpperCase()}
-                      </span>
+            {Array.isArray(comments) && comments
+              .filter(comment => comment && typeof comment === 'object' && (comment.text || comment.content))
+              .map((comment, index) => {
+                // Ensure we have valid comment data
+                const commentText = String(comment.text || comment.content || '');
+                const commentAuthor = comment.author || comment.user || {};
+                const commentId = comment._id || comment.id || `comment-${index}`;
+                const commentCreatedAt = comment.createdAt;
+                
+                // Skip if no valid text content
+                if (!commentText.trim()) {
+                  return null;
+                }
+                
+                return (
+                  <div key={commentId} className="flex space-x-3">
+                    <div className="w-6 h-6 flex-shrink-0">
+                      {getProfilePictureUrl(commentAuthor.profilePicture, String(commentAuthor.username || '')) ? (
+                        <img
+                          src={getProfilePictureUrl(commentAuthor.profilePicture, String(commentAuthor.username || ''))!}
+                          alt={String(commentAuthor.username || 'User')}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                          <span className="text-xs font-bold text-gray-600 dark:text-gray-300">
+                            {String(commentAuthor.username || 'U')[0].toUpperCase()}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">
-                    <span className="font-semibold">{comment.author?.username}</span>{' '}
-                    {comment.text}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
-                  </p>
-                </div>
-              </div>
-            ))}
+                    <div className="flex-1">
+                      <p className="text-sm">
+                        <span className="font-semibold">{String(commentAuthor.username || 'Unknown User')}</span>{' '}
+                        {commentText}
+                      </p>
+                      {commentCreatedAt && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {formatDistanceToNow(new Date(commentCreatedAt), { addSuffix: true })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
           </div>
 
           {/* Actions */}

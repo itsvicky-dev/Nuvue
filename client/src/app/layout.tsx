@@ -6,7 +6,7 @@ import { Providers } from '@/components/providers/Providers'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Instagram Clone',
+  title: 'nuvue',
   description: 'A full-featured Instagram clone built with Next.js',
   keywords: ['Instagram', 'Social Media', 'Photos', 'Sharing'],
 }

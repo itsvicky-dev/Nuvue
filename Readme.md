@@ -1,6 +1,6 @@
-# 📸 Instagram Clone - Full Stack Application
+# 📸 nuvue - Full Stack Application
 
-A complete Instagram clone built with **Next.js 14**, **Node.js**, **Express**, **MongoDB**, and **Socket.IO**.
+A complete Social media application built with **Next.js 14**, **Node.js**, **Express**, **MongoDB**, and **Socket.IO**.
 
 ## ✨ Features
 
@@ -68,7 +68,7 @@ A complete Instagram clone built with **Next.js 14**, **Node.js**, **Express**, 
 ```bash
 # Clone the repository
 git clone <your-repo-url>
-cd glitchat
+cd nuvue
 
 # Run the complete setup script
 COMPLETE_SETUP.bat
@@ -84,7 +84,7 @@ NODE_ENV=development
 CLIENT_URL=http://localhost:3000
 
 # Database
-MONGODB_URI=mongodb://localhost:27017/instagram-clone
+MONGODB_URI=mongodb://localhost:27017/nuvue
 
 # JWT
 JWT_SECRET=your-super-secret-jwt-key-here
@@ -100,7 +100,7 @@ SENDGRID_API_KEY=your-sendgrid-api-key
 EMAIL_FROM=noreply@yourapp.com
 ```
 
-#### Frontend (.env.local in instagram-nextjs/)
+#### Frontend (.env.local in nuvue-nextjs/)
 ```env
 # API
 NEXT_PUBLIC_API_URL=http://localhost:5000/api
@@ -123,7 +123,7 @@ cd server-enhanced
 npm run dev
 
 # Terminal 2 - Frontend
-cd instagram-nextjs
+cd client
 npm run dev
 ```
 
@@ -155,8 +155,8 @@ npm run dev
 ## 🏗 Project Structure
 
 ```
-glitchat/
-├── server-enhanced/           # Backend (Node.js/Express)
+nuvue/
+├── server/           # Backend (Node.js/Express)
 │   ├── controllers/          # Route controllers
 │   ├── middleware/          # Custom middleware
 │   ├── models/             # MongoDB models
@@ -165,7 +165,7 @@ glitchat/
 │   ├── utils/              # Utility functions
 │   └── index.js            # Server entry point
 │
-├── instagram-nextjs/         # Frontend (Next.js)
+├── client/         # Frontend (Next.js)
 │   ├── src/
 │   │   ├── app/            # Next.js App Router
 │   │   ├── components/     # React components
@@ -224,7 +224,7 @@ cd server-enhanced
 npm test
 
 # Frontend tests (if implemented)
-cd instagram-nextjs
+cd client
 npm test
 ```
 
@@ -273,7 +273,7 @@ cd server-enhanced
 DEBUG=* npm run dev
 
 # Frontend debug (check browser console)
-cd instagram-nextjs
+cd client
 npm run dev
 ```
 

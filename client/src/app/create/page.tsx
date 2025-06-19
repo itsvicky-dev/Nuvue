@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/ui/Toaster';
-import { postsApi, storiesApi } from '@/lib/api';
+import { postsApi, reelsApi, storiesApi } from '@/lib/api';
 import { Sidebar } from '@/components/Layout/Sidebar';
 import { MobileNavbar } from '@/components/Layout/MobileNavbar';
 import { ArrowLeft, Image, Video, FileText, X } from 'lucide-react';
@@ -59,13 +59,20 @@ export default function CreatePage() {
         }
         
         response = await storiesApi.createStory(formData);
+      } else if (postType === 'reel') {
+        // Handle reel upload (single video file)
+        if (selectedFiles[0]) {
+          formData.append('video', selectedFiles[0]);
+        }
+        formData.append('caption', caption);
+        
+        response = await reelsApi.createReel(formData);
       } else {
-        // Handle post/reel upload
+        // Handle post upload (multiple files)
         selectedFiles.forEach(file => {
-          formData.append('files', file);
+          formData.append('media', file);
         });
         formData.append('caption', caption);
-        formData.append('type', postType);
         
         response = await postsApi.createPost(formData);
       }

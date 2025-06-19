@@ -1,9 +1,11 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
+import mongoose from 'mongoose';
 import Post from '../models/Post.js';
 import User from '../models/User.js';
+import Reel from '../models/Reel.js';
 import { auth, optionalAuth } from '../middleware/auth.js';
-import { upload } from '../middleware/upload.js';
+import { upload, handleUploadError } from '../middleware/upload.js';
 import { createNotification } from './notifications.js';
 
 const router = express.Router();
@@ -48,17 +50,25 @@ const fixPostMediaUrls = (post, req) => {
 };
 
 // Create a new post
-router.post('/', auth, upload.array('media', 10), [
+router.post('/', auth, upload.array('media', 10), handleUploadError, [
   body('caption').optional().isLength({ max: 2200 }).trim()
 ], async (req, res) => {
   try {
+    console.log('Post creation request received');
+    console.log('Request body:', req.body);
+    console.log('Request files:', req.files);
+    console.log('Files count:', req.files?.length || 0);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
     const { caption, location } = req.body;
     const media = req.files?.map(file => {
+      console.log('Processing file:', file);
+      
       // Convert local file path to URL
       let url = file.path;
       if (!url.startsWith('http')) {
@@ -75,9 +85,9 @@ router.post('/', auth, upload.array('media', 10), [
       return {
         url,
         type: file.mimetype.startsWith('video') ? 'video' : 'image',
-        width: file.width,
-        height: file.height,
-        size: file.size
+        width: file.width || 0,
+        height: file.height || 0,
+        size: file.size || 0
       };
     }) || [];
 
@@ -105,7 +115,11 @@ router.post('/', auth, upload.array('media', 10), [
 
   } catch (error) {
     console.error('Create post error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
+    });
   }
 });
 
@@ -118,9 +132,173 @@ router.get('/feed', auth, async (req, res) => {
     const user = await User.findById(req.userId);
     const posts = await Post.getFeedPosts(req.userId, user.following, page, limit);
 
+    // Debug logging
+    console.log('Feed posts sample:', posts.slice(0, 1).map(p => ({
+      id: p._id,
+      isLikedBy: p.isLikedBy,
+      isSaved: p.isSaved,
+      author: p.author?.username
+    })));
+
     res.json({ posts });
   } catch (error) {
     console.error('Get feed error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get combined feed (posts and reels)
+router.get('/combined-feed', auth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const user = await User.findById(req.userId);
+    
+    // Get posts
+    const posts = await Post.getFeedPosts(req.userId, user.following, page, Math.ceil(limit * 0.7));
+    
+    // Get reels
+    const reels = await Reel.aggregate([
+      {
+        $match: {
+          $or: [
+            { author: { $in: user.following.map(id => new mongoose.Types.ObjectId(id)) } },
+            { author: new mongoose.Types.ObjectId(req.userId) }
+          ],
+          isDeleted: false,
+          isArchived: false,
+          publishedAt: { $lte: new Date() }
+        }
+      },
+      // Join with users to check privacy settings
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'author',
+          foreignField: '_id',
+          as: 'authorInfo'
+        }
+      },
+      { $unwind: '$authorInfo' },
+      // Filter based on privacy settings
+      {
+        $match: {
+          $or: [
+            { 'authorInfo.isPrivate': false }, // Public reels
+            { 'author': new mongoose.Types.ObjectId(req.userId) }, // Own reels
+            { 
+              $and: [
+                { 'authorInfo.isPrivate': true },
+                { 'authorInfo.followers': { $in: [new mongoose.Types.ObjectId(req.userId)] } }
+              ]
+            } // Private reels from followed users
+          ]
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'author',
+          foreignField: '_id',
+          as: 'author',
+          pipeline: [
+            { $project: { username: 1, fullName: 1, profilePicture: 1, isVerified: 1 } }
+          ]
+        }
+      },
+      { $unwind: '$author' },
+      { $sort: { createdAt: -1 } },
+      { $limit: Math.ceil(limit * 0.3) },
+      {
+        $addFields: {
+          type: 'reel',
+          isLikedBy: { $in: [new mongoose.Types.ObjectId(req.userId), '$likes.user'] }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { reelId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', new mongoose.Types.ObjectId(req.userId)] },
+                    { $in: ['$$reelId', '$savedReels'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'savedByUser'
+        }
+      },
+      {
+        $addFields: {
+          isSaved: { $gt: [{ $size: '$savedByUser' }, 0] }
+        }
+      }
+    ]);
+
+    // Add type field to posts while preserving all calculated fields and fix URLs
+    const postsWithType = posts.map(post => {
+      // Convert to plain object to ensure all fields are preserved
+      const postObj = post.toObject ? post.toObject() : post;
+      
+      // Fix media URLs
+      const fixedMedia = postObj.media?.map(mediaItem => ({
+        ...mediaItem,
+        url: fixMediaUrl(mediaItem.url, req)
+      })) || [];
+      
+      return {
+        ...postObj,
+        media: fixedMedia,
+        type: 'post'
+      };
+    });
+
+    // Fix reel video URLs
+    const reelsWithFixedUrls = reels.map(reel => ({
+      ...reel,
+      video: {
+        ...reel.video,
+        url: fixMediaUrl(reel.video.url, req)
+      }
+    }));
+
+    // Combine and sort by creation date
+    const combinedFeed = [...postsWithType, ...reelsWithFixedUrls].sort((a, b) => 
+      new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+    // Debug logging
+    console.log('Combined feed sample:', combinedFeed.slice(0, 2).map(item => ({
+      id: item._id,
+      type: item.type,
+      isLikedBy: item.isLikedBy,
+      isSaved: item.isSaved,
+      savedByUser: item.savedByUser?.length || 0,
+      author: item.author?.username
+    })));
+    
+    // Debug user's saved items
+    console.log('User saved items:', {
+      userId: req.userId,
+      savedPosts: user.savedPosts?.length || 0,
+      savedReels: user.savedReels?.length || 0,
+      savedPostIds: user.savedPosts?.slice(0, 3) || [],
+      savedReelIds: user.savedReels?.slice(0, 3) || []
+    });
+
+    res.json({ 
+      posts: combinedFeed.slice(0, limit),
+      hasMore: combinedFeed.length === limit
+    });
+  } catch (error) {
+    console.error('Get combined feed error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -288,6 +466,51 @@ router.get('/following', auth, async (req, res) => {
   }
 });
 
+// Get saved posts
+router.get('/saved', auth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 12;
+    const skip = (page - 1) * limit;
+
+    const user = await User.findById(req.userId).populate({
+      path: 'savedPosts',
+      match: { isDeleted: false },
+      populate: {
+        path: 'author',
+        select: 'username fullName profilePicture isVerified'
+      },
+      options: {
+        sort: { createdAt: -1 },
+        skip: skip,
+        limit: limit
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Fix URLs for all posts
+    const postsWithFixedUrls = user.savedPosts.map(post => {
+      const postObj = post.toObject ? post.toObject() : post;
+      return fixPostMediaUrls(postObj, req);
+    });
+
+    res.json({ 
+      posts: postsWithFixedUrls,
+      hasMore: user.savedPosts.length === limit
+    });
+
+  } catch (error) {
+    console.error('Get saved posts error:', error);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
+    });
+  }
+});
+
 // Get single post
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
@@ -315,25 +538,49 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // Like/Unlike post
 router.post('/:id/like', auth, async (req, res) => {
   try {
+    console.log('Like post request:', { postId: req.params.id, userId: req.userId });
+    
+    // Validate ObjectId
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: 'Invalid post ID format' });
+    }
+
     const post = await Post.findById(req.params.id);
     if (!post) {
+      console.log('Post not found:', req.params.id);
       return res.status(404).json({ message: 'Post not found' });
     }
 
+    console.log('Post found, current likes:', post.likes.length);
+    
     const isLiked = post.toggleLike(req.userId);
+    console.log('Toggle like result:', { isLiked, newLikesCount: post.likes.length });
+    
     await post.save();
+    console.log('Post saved successfully');
 
     // Create and emit notification
-    const io = req.app.get('io');
-    if (isLiked && post.author.toString() !== req.userId) {
-      const user = await User.findById(req.userId).select('username fullName profilePicture');
-      await createNotification(io, {
-        recipient: post.author,
-        sender: req.userId,
-        type: 'like',
-        message: `${user.username} liked your post`,
-        post: post._id
-      });
+    try {
+      const io = req.app.get('io');
+      if (isLiked && post.author.toString() !== req.userId) {
+        console.log('Creating like notification...');
+        const user = await User.findById(req.userId).select('username fullName profilePicture');
+        if (user) {
+          await createNotification(io, {
+            recipient: post.author,
+            sender: req.userId,
+            type: 'like',
+            message: `${user.username} liked your post`,
+            post: post._id
+          });
+          console.log('Notification created successfully');
+        } else {
+          console.log('User not found for notification');
+        }
+      }
+    } catch (notificationError) {
+      console.error('Notification error (non-blocking):', notificationError);
+      // Don't fail the request if notification fails
     }
 
     res.json({
@@ -344,9 +591,72 @@ router.post('/:id/like', auth, async (req, res) => {
 
   } catch (error) {
     console.error('Like post error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
+    });
   }
 });
+
+// Save/Unsave post
+router.post('/:id/save', auth, async (req, res) => {
+  try {
+    console.log('Save post request:', { postId: req.params.id, userId: req.userId });
+    
+    // Validate ObjectId
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: 'Invalid post ID format' });
+    }
+
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      console.log('Post not found:', req.params.id);
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isSaved = user.savedPosts.includes(req.params.id);
+    
+    if (isSaved) {
+      // Unsave
+      user.savedPosts.pull(req.params.id);
+      console.log('Post unsaved');
+    } else {
+      // Save
+      user.savedPosts.push(req.params.id);
+      console.log('Post saved');
+    }
+
+    await user.save();
+
+    console.log('Save operation completed:', {
+      postId: req.params.id,
+      userId: req.userId,
+      wasSaved: isSaved,
+      nowSaved: !isSaved,
+      savedPostsCount: user.savedPosts.length
+    });
+
+    res.json({
+      message: isSaved ? 'Post unsaved' : 'Post saved',
+      isSaved: !isSaved
+    });
+
+  } catch (error) {
+    console.error('Save post error:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
+    });
+  }
+});
+
 
 // Add comment
 router.post('/:id/comments', auth, [
@@ -498,6 +808,198 @@ router.delete('/:id', auth, async (req, res) => {
     res.json({ message: 'Post deleted successfully' });
   } catch (error) {
     console.error('Delete post error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Save/Unsave post
+router.post('/:id/save', auth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const user = await User.findById(req.userId);
+    const postId = post._id;
+    
+    // Check if post is already saved
+    const isSaved = user.savedPosts.includes(postId);
+    
+    if (isSaved) {
+      // Unsave the post
+      user.savedPosts = user.savedPosts.filter(id => id.toString() !== postId.toString());
+      await user.save();
+      
+      res.json({ 
+        message: 'Post unsaved',
+        isSaved: false
+      });
+    } else {
+      // Save the post
+      user.savedPosts.push(postId);
+      await user.save();
+      
+      res.json({ 
+        message: 'Post saved',
+        isSaved: true
+      });
+    }
+  } catch (error) {
+    console.error('Save/unsave post error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Like/Unlike post
+router.post('/:id/like', auth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const isLiked = post.toggleLike(req.userId);
+    await post.save();
+
+    // Create notification if liked (not if unliked)
+    if (isLiked && post.author.toString() !== req.userId) {
+      await createNotification({
+        recipient: post.author,
+        sender: req.userId,
+        type: 'like',
+        postId: post._id
+      });
+    }
+
+    res.json({ 
+      message: isLiked ? 'Post liked' : 'Post unliked',
+      isLiked,
+      likesCount: post.likes.length
+    });
+  } catch (error) {
+    console.error('Like/unlike post error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Add comment to post
+router.post('/:id/comment', auth, [
+  body('text').notEmpty().isLength({ max: 2200 }).trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const post = await Post.findById(req.params.id);
+    
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const comment = {
+      user: req.userId,
+      text: req.body.text
+    };
+
+    post.comments.push(comment);
+    await post.save();
+
+    // Populate the comment with user info
+    await post.populate({
+      path: 'comments.user',
+      select: 'username fullName profilePicture',
+      match: { _id: req.userId }
+    });
+
+    // Create notification if commenting on someone else's post
+    if (post.author.toString() !== req.userId) {
+      await createNotification({
+        recipient: post.author,
+        sender: req.userId,
+        type: 'comment',
+        postId: post._id
+      });
+    }
+
+    const newComment = post.comments[post.comments.length - 1];
+
+    res.json({ 
+      message: 'Comment added',
+      comment: newComment
+    });
+  } catch (error) {
+    console.error('Add comment error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get user's posts with privacy checks
+router.get('/user/:username', optionalAuth, async (req, res) => {
+  try {
+    const { username } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 12;
+    const skip = (page - 1) * limit;
+
+    // Find the user
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if the requesting user can view this user's posts
+    const canViewPosts = !user.isPrivate || 
+                        req.userId === user._id.toString() || 
+                        (req.userId && user.followers.some(followerId => 
+                          followerId.toString() === req.userId
+                        ));
+
+    if (!canViewPosts) {
+      return res.status(403).json({ 
+        message: 'This account is private',
+        isPrivate: true 
+      });
+    }
+
+    // Get posts
+    const posts = await Post.find({
+      author: user._id,
+      isDeleted: false,
+      isArchived: false
+    })
+    .populate('author', 'username fullName profilePicture isVerified')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+    // Fix media URLs
+    const postsWithFixedUrls = posts.map(post => {
+      const postObj = post.toObject ? post.toObject() : post;
+      return fixPostMediaUrls(postObj, req);
+    });
+
+    // Check if there are more posts
+    const totalPosts = await Post.countDocuments({
+      author: user._id,
+      isDeleted: false,
+      isArchived: false
+    });
+    const hasMore = skip + limit < totalPosts;
+
+    res.json({
+      posts: postsWithFixedUrls,
+      hasMore,
+      page,
+      totalPages: Math.ceil(totalPosts / limit)
+    });
+
+  } catch (error) {
+    console.error('Get user posts error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

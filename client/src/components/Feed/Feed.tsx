@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { postsApi } from '@/lib/api';
 import { Post } from './Post';
+import { Reel } from './Reel';
 import { StoriesBar } from '../Stories/StoriesBar';
 import { SuggestedUsers } from './SuggestedUsers';
 
 export function Feed() {
   const { data: posts, isLoading, error } = useQuery({
     queryKey: ['feed'],
-    queryFn: () => postsApi.getFeed(),
+    queryFn: () => postsApi.getCombinedFeed(),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -55,7 +56,7 @@ export function Feed() {
       {posts?.data?.posts?.length === 0 ? (
         <div className="text-center py-8">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-            Welcome to Instagram!
+            Welcome to Nuvue!
           </h3>
           <p className="text-gray-500 dark:text-gray-400 mb-4">
             Follow some accounts to see their posts in your feed.
@@ -66,11 +67,15 @@ export function Feed() {
         </div>
       ) : (
         <div className="space-y-6">
-          {posts?.data?.posts?.map((post: any, index: number) => (
-            <div key={post._id}>
-              <Post post={post} />
-              {/* Show suggestions after 2nd post */}
-              {index === 1 && <SuggestedUsers />}
+          {posts?.data?.posts?.map((item: any, index: number) => (
+            <div key={item._id}>
+              {item.type === 'reel' ? (
+                <Reel reel={item} />
+              ) : (
+                <Post post={item} />
+              )}
+              {/* Show suggestions after 2nd item */}
+              {index === 1 && <SuggestedUsers variant="compact" maxUsers={6} />}
             </div>
           ))}
         </div>

@@ -155,12 +155,12 @@ postSchema.index({ caption: 'text' });
 
 // Virtual for like count
 postSchema.virtual('likesCount').get(function() {
-  return this.likes.length;
+  return this.likes ? this.likes.length : 0;
 });
 
 // Virtual for comments count
 postSchema.virtual('commentsCount').get(function() {
-  return this.comments.length;
+  return this.comments ? this.comments.length : 0;
 });
 
 // Pre-save middleware to extract hashtags and mentions
@@ -203,18 +203,128 @@ postSchema.methods.toggleLike = function(userId) {
 postSchema.statics.getFeedPosts = function(userId, followingIds, page = 1, limit = 10) {
   const skip = (page - 1) * limit;
   
-  return this.find({
-    author: { $in: [userId, ...followingIds] },
-    isDeleted: false,
-    isArchived: false,
-    publishedAt: { $lte: new Date() }
-  })
-  .populate('author', 'username fullName profilePicture isVerified')
-  .populate('likes.user', 'username')
-  .populate('comments.user', 'username profilePicture')
-  .sort({ publishedAt: -1 })
-  .skip(skip)
-  .limit(limit);
+  return this.aggregate([
+    {
+      $match: {
+        author: { $in: [new mongoose.Types.ObjectId(userId), ...followingIds.map(id => new mongoose.Types.ObjectId(id))] },
+        isDeleted: false,
+        isArchived: false,
+        publishedAt: { $lte: new Date() }
+      }
+    },
+    // Join with users to check privacy settings
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'author',
+        foreignField: '_id',
+        as: 'authorInfo'
+      }
+    },
+    { $unwind: '$authorInfo' },
+    // Filter out posts from private accounts that user doesn't follow
+    {
+      $match: {
+        $or: [
+          { 'authorInfo.isPrivate': false }, // Public posts
+          { 'author': new mongoose.Types.ObjectId(userId) }, // Own posts
+          { 
+            $and: [
+              { 'authorInfo.isPrivate': true },
+              { 'authorInfo.followers': { $in: [new mongoose.Types.ObjectId(userId)] } }
+            ]
+          } // Private posts from followed users
+        ]
+      }
+    },
+    {
+      $addFields: {
+        isLikedBy: {
+          $in: [new mongoose.Types.ObjectId(userId), '$likes.user']
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'users',
+        let: { postId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$_id', new mongoose.Types.ObjectId(userId)] },
+                  { $in: ['$$postId', '$savedPosts'] }
+                ]
+              }
+            }
+          }
+        ],
+        as: 'savedByUser'
+      }
+    },
+    {
+      $addFields: {
+        isSaved: { $gt: [{ $size: '$savedByUser' }, 0] }
+      }
+    },
+    { $sort: { publishedAt: -1 } },
+    { $skip: skip },
+    { $limit: limit },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'author',
+        foreignField: '_id',
+        as: 'author',
+        pipeline: [
+          { $project: { username: 1, fullName: 1, profilePicture: 1, isVerified: 1 } }
+        ]
+      }
+    },
+    { $unwind: '$author' },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'comments.user',
+        foreignField: '_id',
+        as: 'commentUsers'
+      }
+    },
+    {
+      $addFields: {
+        comments: {
+          $map: {
+            input: '$comments',
+            as: 'comment',
+            in: {
+              $mergeObjects: [
+                '$$comment',
+                {
+                  user: {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: '$commentUsers',
+                          cond: { $eq: ['$$this._id', '$$comment.user'] }
+                        }
+                      },
+                      0
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        commentUsers: 0
+      }
+    }
+  ]);
 };
 
 // Static method to get explore posts
@@ -224,10 +334,34 @@ postSchema.statics.getExplorePosts = function(userId, page = 1, limit = 20) {
   return this.aggregate([
     {
       $match: {
-        author: { $ne: userId },
+        author: { $ne: new mongoose.Types.ObjectId(userId) },
         isDeleted: false,
         isArchived: false,
         publishedAt: { $lte: new Date() }
+      }
+    },
+    // Join with users to check privacy settings
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'author',
+        foreignField: '_id',
+        as: 'authorInfo'
+      }
+    },
+    { $unwind: '$authorInfo' },
+    // Filter out posts from private accounts that user doesn't follow
+    {
+      $match: {
+        $or: [
+          { 'authorInfo.isPrivate': false }, // Only public posts in explore
+          { 
+            $and: [
+              { 'authorInfo.isPrivate': true },
+              { 'authorInfo.followers': { $in: [new mongoose.Types.ObjectId(userId || '000000000000000000000000')] } }
+            ]
+          } // Private posts from followed users (if userId exists)
+        ]
       }
     },
     {
@@ -238,6 +372,43 @@ postSchema.statics.getExplorePosts = function(userId, page = 1, limit = 20) {
             { $multiply: [{ $size: '$comments' }, 2] },
             { $divide: ['$views', 100] }
           ]
+        },
+        isLikedBy: {
+          $cond: {
+            if: { $eq: [userId, null] },
+            then: false,
+            else: { $in: [userId, '$likes.user'] }
+          }
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'users',
+        let: { postId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$_id', new mongoose.Types.ObjectId(userId || '000000000000000000000000')] },
+                  { $in: ['$$postId', '$savedPosts'] }
+                ]
+              }
+            }
+          }
+        ],
+        as: 'savedByUser'
+      }
+    },
+    {
+      $addFields: {
+        isSaved: {
+          $cond: {
+            if: { $eq: [userId, null] },
+            then: false,
+            else: { $gt: [{ $size: '$savedByUser' }, 0] }
+          }
         }
       }
     },

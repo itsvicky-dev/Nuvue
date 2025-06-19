@@ -13,8 +13,11 @@ router.post('/', auth, upload.single('media'), [
   body('text').optional().isLength({ max: 500 }).trim()
 ], async (req, res) => {
   try {
+    console.log('Create story request:', { userId: req.userId, body: req.body, file: req.file?.filename });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -24,14 +27,25 @@ router.post('/', auth, upload.single('media'), [
 
     const { text, textStyle, location, mentions, hashtags, visibility } = req.body;
 
+    let mediaUrl = null;
+    if (req.file) {
+      mediaUrl = req.file.path;
+      // Convert to full URL if it's a local path
+      if (!mediaUrl.startsWith('http')) {
+        mediaUrl = mediaUrl.replace(/\\/g, '/');
+        mediaUrl = mediaUrl.replace(/^\/+/, '');
+        mediaUrl = `${req.protocol}://${req.get('host')}/${mediaUrl}`;
+      }
+    }
+
     const story = new Story({
       author: req.userId,
       media: req.file ? {
-        url: req.file.path,
+        url: mediaUrl,
         type: req.file.mimetype.startsWith('video') ? 'video' : 'image',
-        width: req.file.width,
-        height: req.file.height,
-        size: req.file.size
+        width: req.file.width || 0,
+        height: req.file.height || 0,
+        size: req.file.size || 0
       } : undefined,
       text,
       textStyle: textStyle ? JSON.parse(textStyle) : undefined,
@@ -44,16 +58,26 @@ router.post('/', auth, upload.single('media'), [
     await story.save();
     await story.populate('author', 'username fullName profilePicture isVerified');
 
+    console.log('Story created successfully:', story._id);
+
     // Emit real-time notification to followers
-    const io = req.app.get('io');
-    const user = await User.findById(req.userId).populate('followers', '_id');
-    
-    user.followers.forEach(follower => {
-      io.to(`user_${follower._id}`).emit('new_story', {
-        story,
-        author: req.user
-      });
-    });
+    try {
+      const io = req.app.get('io');
+      const user = await User.findById(req.userId).populate('followers', '_id');
+      
+      if (user.followers.length > 0) {
+        user.followers.forEach(follower => {
+          io.to(`user_${follower._id}`).emit('new_story', {
+            story,
+            author: req.user
+          });
+        });
+        console.log('Story notifications sent to followers');
+      }
+    } catch (notificationError) {
+      console.error('Story notification error (non-blocking):', notificationError);
+      // Don't fail the request if notification fails
+    }
 
     res.status(201).json({
       message: 'Story created successfully',
@@ -62,7 +86,19 @@ router.post('/', auth, upload.single('media'), [
 
   } catch (error) {
     console.error('Create story error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error stack:', error.stack);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        message: 'Validation error',
+        errors: Object.values(error.errors).map(e => ({ field: e.path, message: e.message }))
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
+    });
   }
 });
 

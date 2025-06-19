@@ -2,6 +2,7 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User.js';
 import Post from '../models/Post.js';
+import Notification from '../models/Notification.js';
 import { auth, optionalAuth } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import { createNotification } from './notifications.js';
@@ -75,22 +76,35 @@ router.get('/:username', optionalAuth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
+console.log('Retrieved user data:', req.userId);
+console.log('Retrieved user:', user);
     // Check if current user follows this user
     const isFollowing = req.userId ? user.followers.some(
-      follower => follower._id.toString() === req.userId
+      follower => {
+        const followerId = follower._id ? follower._id.toString() : follower.toString();
+        return followerId === req.userId.toString();
+      }
     ) : false;
 
     // Check if this user follows current user
     const followsYou = req.userId ? user.following.some(
-      following => following._id.toString() === req.userId
+      following => {
+        const followingId = following._id ? following._id.toString() : following.toString();
+        return followingId === req.userId.toString();
+      }
+    ) : false;
+
+    // Check if current user has requested to follow this user
+    const hasRequestedFollow = req.userId ? user.followRequests.some(
+      request => request.toString() === req.userId.toString()
     ) : false;
 
     // Hide sensitive info for other users
     const userProfile = {
       ...user.toJSON(),
       isFollowing,
-      followsYou
+      followsYou,
+      isRequested: hasRequestedFollow
     };
 
     if (req.userId !== user._id.toString()) {
@@ -109,11 +123,14 @@ router.get('/:username', optionalAuth, async (req, res) => {
 router.put('/profile', auth, upload.single('profilePicture'), [
   body('fullName').optional().isLength({ min: 1, max: 50 }).trim(),
   body('bio').optional().isLength({ max: 150 }).trim(),
-  body('website').optional().isURL()
+  body('website').optional().isURL().withMessage('Please enter a valid URL')
 ], async (req, res) => {
   try {
+    console.log('Profile update request:', { userId: req.userId, body: req.body, file: req.file?.filename });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -123,13 +140,30 @@ router.put('/profile', auth, upload.single('profilePicture'), [
     if (fullName !== undefined) updates.fullName = fullName;
     if (bio !== undefined) updates.bio = bio;
     if (website !== undefined) updates.website = website;
-    if (req.file) updates.profilePicture = req.file.path;
+    if (req.file) {
+      // Convert file path to URL format
+      let profilePictureUrl = req.file.path;
+      if (!profilePictureUrl.startsWith('http')) {
+        profilePictureUrl = profilePictureUrl.replace(/\\/g, '/');
+        profilePictureUrl = profilePictureUrl.replace(/^\/+/, '');
+        profilePictureUrl = `${req.protocol}://${req.get('host')}/${profilePictureUrl}`;
+      }
+      updates.profilePicture = profilePictureUrl;
+    }
+
+    console.log('Updates to apply:', updates);
 
     const user = await User.findByIdAndUpdate(
       req.userId, 
       updates, 
-      { new: true }
+      { new: true, runValidators: true }
     ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log('Profile updated successfully for user:', user.username);
 
     res.json({
       message: 'Profile updated successfully',
@@ -138,7 +172,19 @@ router.put('/profile', auth, upload.single('profilePicture'), [
 
   } catch (error) {
     console.error('Update profile error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error stack:', error.stack);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        message: 'Validation error',
+        errors: Object.values(error.errors).map(e => ({ field: e.path, message: e.message }))
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
+    });
   }
 });
 
@@ -159,6 +205,9 @@ router.post('/:username/follow', auth, async (req, res) => {
     const currentUser = await User.findById(req.userId);
 
     const isFollowing = currentUser.following.includes(targetUser._id);
+    const hasRequestedFollow = targetUser.followRequests.some(requestId => 
+      requestId.toString() === req.userId.toString()
+    );
 
     if (isFollowing) {
       // Unfollow
@@ -166,32 +215,102 @@ router.post('/:username/follow', auth, async (req, res) => {
       targetUser.followers.pull(req.userId);
       currentUser.followingCount -= 1;
       targetUser.followersCount -= 1;
-    } else {
-      // Follow
-      currentUser.following.push(targetUser._id);
-      targetUser.followers.push(req.userId);
-      currentUser.followingCount += 1;
-      targetUser.followersCount += 1;
-    }
+      
+      await currentUser.save();
+      await targetUser.save();
 
-    await currentUser.save();
-    await targetUser.save();
+      res.json({
+        message: 'Unfollowed successfully',
+        isFollowing: false,
+        isRequested: false
+      });
+    } else if (hasRequestedFollow) {
+      // Cancel follow request
+      targetUser.followRequests.pull(req.userId);
+      await targetUser.save();
 
-    // Create and emit notification
-    const io = req.app.get('io');
-    if (!isFollowing) {
-      await createNotification(io, {
+      // Remove all follow request notifications from this sender to this recipient
+      await Notification.deleteMany({
         recipient: targetUser._id,
         sender: req.userId,
-        type: 'follow',
-        message: `${currentUser.username} started following you`
+        type: 'follow_request'
       });
-    }
 
-    res.json({
-      message: isFollowing ? 'Unfollowed successfully' : 'Followed successfully',
-      isFollowing: !isFollowing
-    });
+      // Emit real-time notification removal
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${targetUser._id}`).emit('notificationRemoved', {
+          type: 'follow_request',
+          senderId: req.userId,
+          senderUsername: currentUser.username
+        });
+      }
+
+      res.json({
+        message: 'Follow request cancelled',
+        isFollowing: false,
+        isRequested: false
+      });
+    } else {
+      // Check if target user is private
+      if (targetUser.isPrivate) {
+        // Send follow request
+        targetUser.followRequests.push(req.userId);
+        await targetUser.save();
+
+        // Clean up any duplicate follow request notifications first
+        await Notification.cleanupDuplicateFollowRequests(targetUser._id, req.userId);
+
+        // Check if a follow request notification already exists from this sender
+        const existingNotification = await Notification.findOne({
+          recipient: targetUser._id,
+          sender: req.userId,
+          type: 'follow_request'
+        });
+
+        // Only create notification if one doesn't already exist
+        if (!existingNotification) {
+          // Create and emit notification for follow request
+          const io = req.app.get('io');
+          await createNotification(io, {
+            recipient: targetUser._id,
+            sender: req.userId,
+            type: 'follow_request',
+            message: `${currentUser.username} requested to follow you`
+          });
+        }
+
+        res.json({
+          message: 'Follow request sent',
+          isFollowing: false,
+          isRequested: true
+        });
+      } else {
+        // Follow immediately (public account)
+        currentUser.following.push(targetUser._id);
+        targetUser.followers.push(req.userId);
+        currentUser.followingCount += 1;
+        targetUser.followersCount += 1;
+
+        await currentUser.save();
+        await targetUser.save();
+
+        // Create and emit notification
+        const io = req.app.get('io');
+        await createNotification(io, {
+          recipient: targetUser._id,
+          sender: req.userId,
+          type: 'follow',
+          message: `${currentUser.username} started following you`
+        });
+
+        res.json({
+          message: 'Followed successfully',
+          isFollowing: true,
+          isRequested: false
+        });
+      }
+    }
 
   } catch (error) {
     console.error('Follow/unfollow error:', error);
@@ -213,7 +332,9 @@ router.get('/:username/followers', optionalAuth, async (req, res) => {
 
     // Check privacy settings
     if (user.isPrivate && req.userId !== user._id.toString()) {
-      const isFollowing = user.followers.includes(req.userId);
+      const isFollowing = user.followers.some(followerId => 
+        followerId.toString() === req.userId
+      );
       if (!isFollowing) {
         return res.status(403).json({ message: 'Private account' });
       }
@@ -249,7 +370,9 @@ router.get('/:username/following', optionalAuth, async (req, res) => {
 
     // Check privacy settings
     if (user.isPrivate && req.userId !== user._id.toString()) {
-      const isFollowing = user.followers.includes(req.userId);
+      const isFollowing = user.followers.some(followerId => 
+        followerId.toString() === req.userId
+      );
       if (!isFollowing) {
         return res.status(403).json({ message: 'Private account' });
       }
@@ -313,6 +436,326 @@ router.post('/:username/block', auth, async (req, res) => {
 
   } catch (error) {
     console.error('Block/unblock error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update privacy settings
+router.put('/privacy', auth, async (req, res) => {
+  try {
+    const { isPrivate } = req.body;
+    
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (typeof isPrivate === 'boolean') {
+      user.isPrivate = isPrivate;
+      await user.save();
+    }
+
+    res.json({
+      message: 'Privacy settings updated successfully',
+      isPrivate: user.isPrivate
+    });
+
+  } catch (error) {
+    console.error('Update privacy settings error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get blocked users
+router.get('/blocked', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId)
+      .populate('blocked', 'username fullName profilePicture');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ blockedUsers: user.blocked });
+
+  } catch (error) {
+    console.error('Get blocked users error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get follow requests
+router.get('/follow-requests', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId)
+      .populate('followRequests', 'username fullName profilePicture isVerified');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ followRequests: user.followRequests });
+
+  } catch (error) {
+    console.error('Get follow requests error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Accept follow request
+router.post('/follow-requests/:userId/accept', auth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const currentUser = await User.findById(req.userId);
+    const requesterUser = await User.findById(userId);
+    
+    if (!currentUser || !requesterUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if follow request exists
+    if (!currentUser.followRequests.some(requestId => requestId.toString() === userId)) {
+      return res.status(400).json({ message: 'Follow request not found' });
+    }
+
+    // Remove from follow requests
+    currentUser.followRequests.pull(userId);
+    
+    // Add to followers/following only if not already following
+    if (!currentUser.followers.some(followerId => followerId.toString() === userId)) {
+      currentUser.followers.push(userId);
+      currentUser.followersCount += 1;
+    }
+    
+    if (!requesterUser.following.some(followingId => followingId.toString() === req.userId.toString())) {
+      requesterUser.following.push(req.userId);
+      requesterUser.followingCount += 1;
+    }
+
+    await currentUser.save();
+    await requesterUser.save();
+
+    // Create and emit notification
+    const io = req.app.get('io');
+    await createNotification(io, {
+      recipient: userId,
+      sender: req.userId,
+      type: 'follow_accept',
+      message: `${currentUser.username} accepted your follow request`
+    });
+
+    res.json({
+      message: 'Follow request accepted',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Accept follow request error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Reject follow request
+router.post('/follow-requests/:userId/reject', auth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const currentUser = await User.findById(req.userId);
+    
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if follow request exists
+    if (!currentUser.followRequests.some(requestId => requestId.toString() === userId)) {
+      return res.status(400).json({ message: 'Follow request not found' });
+    }
+
+    // Remove from follow requests
+    currentUser.followRequests.pull(userId);
+    await currentUser.save();
+
+    res.json({
+      message: 'Follow request rejected',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Reject follow request error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Accept follow request by username
+router.post('/follow-requests/username/:username/accept', auth, async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    const currentUser = await User.findById(req.userId);
+    const requesterUser = await User.findOne({ username });
+    
+    if (!currentUser || !requesterUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if follow request exists
+    console.log('Accept - Current user follow requests:', currentUser.followRequests);
+    console.log('Accept - Requester user ID:', requesterUser._id);
+    console.log('Accept - Follow request exists:', currentUser.followRequests.includes(requesterUser._id));
+    
+    if (!currentUser.followRequests.includes(requesterUser._id)) {
+      return res.status(400).json({ 
+        message: 'Follow request not found',
+        debug: {
+          currentUserRequests: currentUser.followRequests,
+          requesterUserId: requesterUser._id,
+          currentUserId: req.userId,
+          currentUserUsername: currentUser.username,
+          requesterUsername: requesterUser.username
+        }
+      });
+    }
+
+    // Remove from follow requests
+    currentUser.followRequests.pull(requesterUser._id);
+    
+    // Add to followers/following only if not already following
+    if (!currentUser.followers.includes(requesterUser._id)) {
+      currentUser.followers.push(requesterUser._id);
+      currentUser.followersCount += 1;
+    }
+    
+    if (!requesterUser.following.some(followingId => followingId.toString() === req.userId)) {
+      requesterUser.following.push(req.userId);
+      requesterUser.followingCount += 1;
+    }
+
+    await currentUser.save();
+    await requesterUser.save();
+
+    // Remove all follow request notifications from this sender
+    await Notification.deleteMany({
+      recipient: req.userId,
+      sender: requesterUser._id,
+      type: 'follow_request'
+    });
+
+    // Create and emit notification
+    const io = req.app.get('io');
+    await createNotification(io, {
+      recipient: requesterUser._id,
+      sender: req.userId,
+      type: 'follow_accept',
+      message: `${currentUser.username} accepted your follow request`
+    });
+
+    // Emit real-time notification removal for follow requests
+    if (io) {
+      io.to(`user_${req.userId}`).emit('notificationRemoved', {
+        type: 'follow_request',
+        senderId: requesterUser._id,
+        senderUsername: requesterUser.username
+      });
+    }
+
+    res.json({
+      message: 'Follow request accepted',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Accept follow request error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Reject follow request by username
+router.post('/follow-requests/username/:username/reject', auth, async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    const currentUser = await User.findById(req.userId);
+    const requesterUser = await User.findOne({ username });
+    
+    if (!currentUser || !requesterUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if follow request exists
+    console.log('Reject - Current user follow requests:', currentUser.followRequests);
+    console.log('Reject - Requester user ID:', requesterUser._id);
+    console.log('Reject - Follow request exists:', currentUser.followRequests.includes(requesterUser._id));
+    
+    if (!currentUser.followRequests.includes(requesterUser._id)) {
+      return res.status(400).json({ 
+        message: 'Follow request not found',
+        debug: {
+          currentUserRequests: currentUser.followRequests,
+          requesterUserId: requesterUser._id,
+          currentUserId: req.userId,
+          currentUserUsername: currentUser.username,
+          requesterUsername: requesterUser.username
+        }
+      });
+    }
+
+    // Remove from follow requests
+    currentUser.followRequests.pull(requesterUser._id);
+    await currentUser.save();
+
+    // Remove all follow request notifications from this sender
+    await Notification.deleteMany({
+      recipient: req.userId,
+      sender: requesterUser._id,
+      type: 'follow_request'
+    });
+
+    // Emit real-time notification removal for follow requests
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user_${req.userId}`).emit('notificationRemoved', {
+        type: 'follow_request',
+        senderId: requesterUser._id,
+        senderUsername: requesterUser.username
+      });
+    }
+
+    res.json({
+      message: 'Follow request rejected',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Reject follow request error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Cleanup data inconsistencies (remove users from followRequests if they're already followers)
+router.post('/cleanup-follow-data', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Remove users from followRequests if they're already in followers
+    const followersIds = user.followers.map(f => f.toString());
+    const cleanedFollowRequests = user.followRequests.filter(
+      requestId => !followersIds.includes(requestId.toString())
+    );
+
+    user.followRequests = cleanedFollowRequests;
+    await user.save();
+
+    res.json({
+      message: 'Follow data cleaned up successfully',
+      removedRequests: user.followRequests.length !== cleanedFollowRequests.length
+    });
+
+  } catch (error) {
+    console.error('Cleanup follow data error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

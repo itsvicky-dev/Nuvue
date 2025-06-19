@@ -29,7 +29,7 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     const transporter = createTransporter();
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || 'noreply@instagram-clone.com',
+      from: process.env.EMAIL_FROM || 'noreply@nuvue.com',
       to,
       subject,
       html,
@@ -48,10 +48,10 @@ export const sendEmail = async ({ to, subject, html, text }) => {
 // Email templates
 export const emailTemplates = {
   welcome: (username) => ({
-    subject: 'Welcome to Instagram Clone!',
+    subject: 'Welcome to Nuvue!',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Welcome to Instagram Clone, ${username}!</h2>
+        <h2 style="color: #333;">Welcome to Nuvue, ${username}!</h2>
         <p>Thank you for joining our community. You're all set to start sharing your moments!</p>
         <p>Get started by:</p>
         <ul>
@@ -62,14 +62,14 @@ export const emailTemplates = {
         <p>Happy sharing!</p>
         <hr>
         <p style="color: #666; font-size: 12px;">
-          This email was sent from Instagram Clone. If you didn't create an account, please ignore this email.
+          This email was sent from Nuvue. If you didn't create an account, please ignore this email.
         </p>
       </div>
     `
   }),
 
   passwordReset: (resetUrl) => ({
-    subject: 'Reset Your Password - Instagram Clone',
+    subject: 'Reset Your Password - Nuvue',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #333;">Password Reset Request</h2>
@@ -85,14 +85,14 @@ export const emailTemplates = {
         <p>If you didn't request this password reset, please ignore this email.</p>
         <hr>
         <p style="color: #666; font-size: 12px;">
-          Instagram Clone Security Team
+          Nuvue Security Team
         </p>
       </div>
     `
   }),
 
   emailVerification: (verificationUrl) => ({
-    subject: 'Verify Your Email - Instagram Clone',
+    subject: 'Verify Your Email - Nuvue',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #333;">Verify Your Email Address</h2>
@@ -107,7 +107,7 @@ export const emailTemplates = {
         <p>If you didn't create an account, please ignore this email.</p>
         <hr>
         <p style="color: #666; font-size: 12px;">
-          Instagram Clone Team
+          Nuvue Team
         </p>
       </div>
     `

@@ -10,8 +10,22 @@ interface User {
   email: string;
   fullName: string;
   profilePicture?: string;
+  bio?: string;
+  website?: string;
   isVerified: boolean;
   emailVerified: boolean;
+  isPrivate?: boolean;
+  preferences?: {
+    theme?: string;
+    language?: string;
+    notifications?: {
+      likes: boolean;
+      comments: boolean;
+      follows: boolean;
+      messages: boolean;
+      posts: boolean;
+    };
+  };
 }
 
 interface AuthContextType {
