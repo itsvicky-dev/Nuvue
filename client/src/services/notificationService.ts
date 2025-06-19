@@ -158,13 +158,7 @@ class NotificationService {
       tag: `${data.type}-${data.username}`, // Prevent duplicate notifications
       requireInteraction: false,
       silent: true, // We handle sound ourselves
-      timestamp: Date.now(),
     };
-
-    // Add image for post-related notifications
-    if (data.postImage && (data.type === 'like' || data.type === 'comment')) {
-      options.image = data.postImage;
-    }
 
     try {
       const notification = new Notification(title, options);

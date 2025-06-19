@@ -26,9 +26,6 @@ export function StoriesBar() {
     queryKey: ['stories-feed'],
     queryFn: () => storiesApi.getFeed(),
     staleTime: 30 * 1000, // 30 seconds
-    onSuccess: (data) => {
-      console.log('Stories feed data:', data);
-    }
   });
 
   const handleAddStoryClick = (e: React.MouseEvent) => {
