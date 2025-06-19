@@ -23,8 +23,18 @@ const nextConfig = {
       },
     ],
   },
+  // Server Actions are enabled by default in Next.js 14
+  // experimental.serverActions option removed as it's deprecated
+  
+  // Optimize build process
+  swcMinify: true,
+  
+  // Configure output for better deployment
+  output: 'standalone',
+  
+  // Reduce bundle size
   experimental: {
-    serverActions: true,
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 }
 
