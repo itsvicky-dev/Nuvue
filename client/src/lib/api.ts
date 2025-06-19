@@ -127,7 +127,7 @@ export const authApi = {
   deactivateAccount: (password: string) =>
     api.post('/auth/deactivate', { password }),
 
-  deleteAccount: (data: { password: string; confirmation: string }) =>
+  deleteAccount: (data: { password: string; confirmation: string; reason?: string }) =>
     api.delete('/auth/delete-account', { data }),
 };
 

@@ -122,7 +122,13 @@ router.post('/login', [
 
     // Check if account is active
     if (!user.isActive) {
-      return res.status(400).json({ message: 'Account is deactivated' });
+      return res.status(403).json({ 
+        message: 'Account is deactivated',
+        accountDeactivated: true,
+        userId: user._id,
+        username: user.username,
+        email: user.email
+      });
     }
 
     // Update last login
@@ -393,6 +399,64 @@ router.post('/deactivate', auth, [
   } catch (error) {
     console.error('Deactivate account error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Reactivate account
+router.post('/reactivate', [
+  body('identifier').notEmpty().withMessage('Email or username is required'),
+  body('password').notEmpty().withMessage('Password is required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { identifier, password } = req.body;
+
+    // Find user by email or username
+    const user = await User.findByEmailOrUsername(identifier);
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    // Check password
+    const isValidPassword = await user.comparePassword(password);
+    if (!isValidPassword) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    // Check if account is already active
+    if (user.isActive) {
+      return res.status(400).json({ message: 'Account is already active' });
+    }
+
+    // Reactivate account
+    user.isActive = true;
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Generate JWT token
+    const token = user.generateAuthToken();
+
+    res.json({
+      message: 'Account reactivated successfully',
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        profilePicture: user.profilePicture,
+        isVerified: user.isVerified,
+        emailVerified: user.emailVerified
+      }
+    });
+
+  } catch (error) {
+    console.error('Reactivate account error:', error);
+    res.status(500).json({ message: 'Server error during reactivation' });
   }
 });
 

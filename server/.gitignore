@@ -8,7 +8,8 @@ pnpm-debug.log*
 lerna-debug.log*
 /.github
 node_modules
-# .env.local
+.env.local
+.env
 /uploads
 
 # Editor directories and files

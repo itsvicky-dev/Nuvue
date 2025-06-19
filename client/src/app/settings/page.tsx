@@ -23,7 +23,9 @@ import {
   Trash2,
   AlertTriangle,
   Save,
-  X
+  X,
+  Heart,
+  ChevronLeft
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '@/components/providers/ThemeProvider';
@@ -74,11 +76,25 @@ export default function SettingsPage() {
   const [deactivatePassword, setDeactivatePassword] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
+  const [deleteStep, setDeleteStep] = useState(1); // 1: reason, 2: confirmation
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, logout, updateUser } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme, resolvedTheme } = useTheme();
+
+  const deleteReasons = [
+    'I don\'t find it useful anymore',
+    'I\'m concerned about my privacy',
+    'I\'m spending too much time on social media',
+    'I\'m switching to another platform',
+    'I\'m having technical issues',
+    'I don\'t like the recent changes',
+    'I\'m taking a break from social media',
+    'Other (please specify)'
+  ];
 
   // Initialize form data when user is available
   React.useEffect(() => {
@@ -364,9 +380,12 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
+      const finalReason = deleteReason === 'Other (please specify)' ? customReason : deleteReason;
+      
       await authApi.deleteAccount({
         password: deactivatePassword,
-        confirmation: deleteConfirmation
+        confirmation: deleteConfirmation,
+        reason: finalReason
       });
       toast({
         title: 'Account deleted',
@@ -385,7 +404,41 @@ export default function SettingsPage() {
       setShowDeleteModal(false);
       setDeleteConfirmation('');
       setDeactivatePassword('');
+      setDeleteReason('');
+      setCustomReason('');
+      setDeleteStep(1);
     }
+  };
+
+  const handleDeleteModalClose = () => {
+    setShowDeleteModal(false);
+    setDeleteStep(1);
+    setDeleteReason('');
+    setCustomReason('');
+    setDeleteConfirmation('');
+    setDeactivatePassword('');
+  };
+
+  const handleDeleteNext = () => {
+    if (!deleteReason) {
+      toast({
+        title: 'Please select a reason',
+        description: 'We\'d love to know why you\'re leaving us.',
+        type: 'error'
+      });
+      return;
+    }
+    
+    if (deleteReason === 'Other (please specify)' && !customReason.trim()) {
+      toast({
+        title: 'Please specify your reason',
+        description: 'Help us understand how we can improve.',
+        type: 'error'
+      });
+      return;
+    }
+    
+    setDeleteStep(2);
   };
 
   const handleLogout = async () => {
@@ -745,7 +798,7 @@ export default function SettingsPage() {
                 {activeSection && (
                   <button
                     onClick={() => setActiveSection(null)}
-                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg md:hidden"
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                   >
                     <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
                   </button>
@@ -913,73 +966,166 @@ export default function SettingsPage() {
       {/* Delete Account Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-dark-surface rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Delete Account
-              </h3>
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="mb-4">
-              <div className="flex items-center space-x-2 text-red-600 dark:text-red-400 mb-2">
-                <AlertTriangle size={20} />
-                <span className="font-medium">Danger</span>
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                This action cannot be undone. This will permanently delete your account and 
-                remove all your data from our servers.
-              </p>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Enter your password
-              </label>
-              <input
-                type="password"
-                value={deactivatePassword}
-                onChange={(e) => setDeactivatePassword(e.target.value)}
-                className="input"
-                placeholder="Password"
-                required
-              />
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Type "DELETE" to confirm
-              </label>
-              <input
-                type="text"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="input"
-                placeholder="DELETE"
-                required
-              />
-            </div>
-            
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="flex-1 btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteAccount}
-                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                disabled={loading}
-              >
-                {loading ? 'Deleting...' : 'Delete Account'}
-              </button>
-            </div>
+          <div className="bg-white dark:bg-dark-surface rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            {deleteStep === 1 ? (
+              <>
+                {/* Step 1: Cute message and reason collection */}
+                <div className="text-center mb-6">
+                  <div className="flex justify-center mb-4">
+                    <div className="relative">
+                      <Heart className="h-16 w-16 text-red-400 animate-pulse" fill="currentColor" />
+                      <div className="absolute -top-1 -right-1 text-2xl">💔</div>
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                    We'll miss you! 😢
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    Before you go, could you give us another chance? We're constantly improving and would love to keep you around! 
+                  </p>
+                  <div className="bg-gradient-to-r from-pink-50 to-purple-50 dark:from-pink-900/20 dark:to-purple-900/20 rounded-lg p-4 mb-6">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      💡 <strong>Did you know?</strong> You can always deactivate your account temporarily instead of deleting it permanently!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                    Help us improve - Why are you leaving? 🤔
+                  </h4>
+                  <div className="space-y-2">
+                    {deleteReasons.map((reason, index) => (
+                      <label key={index} className="flex items-center space-x-3 cursor-pointer p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <input
+                          type="radio"
+                          name="deleteReason"
+                          value={reason}
+                          checked={deleteReason === reason}
+                          onChange={(e) => setDeleteReason(e.target.value)}
+                          className="text-ig-blue focus:ring-ig-blue"
+                        />
+                        <span className="text-gray-700 dark:text-gray-300">{reason}</span>
+                      </label>
+                    ))}
+                  </div>
+                  
+                  {deleteReason === 'Other (please specify)' && (
+                    <div className="mt-3">
+                      <textarea
+                        value={customReason}
+                        onChange={(e) => setCustomReason(e.target.value)}
+                        className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none"
+                        rows={3}
+                        placeholder="Please tell us more... Your feedback helps us improve! 💝"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleDeleteModalClose}
+                    className="flex-1 btn-secondary"
+                  >
+                    Stay with us! 🥺
+                  </button>
+                  <button
+                    onClick={handleDeleteNext}
+                    className="flex-1 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+                  >
+                    Continue to Delete 😔
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Step 2: Final confirmation */}
+                <div className="flex items-center justify-between mb-4">
+                  <button
+                    onClick={() => setDeleteStep(1)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Final Confirmation
+                  </h3>
+                  <button
+                    onClick={handleDeleteModalClose}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                
+                <div className="text-center mb-6">
+                  <div className="text-6xl mb-4">💔</div>
+                  <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                    Last chance to stay!
+                  </h4>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    We're really sad to see you go. This action cannot be undone and will permanently delete your account and all your precious memories.
+                  </p>
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
+                    <div className="flex items-center space-x-2 text-red-600 dark:text-red-400 mb-2">
+                      <AlertTriangle size={20} />
+                      <span className="font-medium">This will permanently delete:</span>
+                    </div>
+                    <ul className="text-sm text-red-600 dark:text-red-400 text-left space-y-1">
+                      <li>• All your posts and photos</li>
+                      <li>• Your followers and following</li>
+                      <li>• All your messages and conversations</li>
+                      <li>• Your profile and account data</li>
+                    </ul>
+                  </div>
+                </div>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Enter your password to confirm
+                  </label>
+                  <input
+                    type="password"
+                    value={deactivatePassword}
+                    onChange={(e) => setDeactivatePassword(e.target.value)}
+                    className="input"
+                    placeholder="Password"
+                    required
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Type "DELETE" to confirm
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmation}
+                    onChange={(e) => setDeleteConfirmation(e.target.value)}
+                    className="input"
+                    placeholder="DELETE"
+                    required
+                  />
+                </div>
+                
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleDeleteModalClose}
+                    className="flex-1 border border-green-600 text-green-600 px-4 py-2 rounded-lg hover:bg-green-700 hover:text-white transition-colors"
+                  >
+                    Keep My Account! 🎉
+                  </button>
+                  <button
+                    onClick={handleDeleteAccount}
+                    className="flex-1 border border-red-600 text-red-600 px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                    disabled={loading}
+                  >
+                    {loading ? 'Deleting... 💔' : 'Delete Forever 🙁'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

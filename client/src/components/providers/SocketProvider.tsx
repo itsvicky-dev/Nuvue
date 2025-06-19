@@ -22,9 +22,16 @@ export function useSocket() {
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
     if (!user) {
       if (socket) {
         socket.disconnect();
@@ -70,7 +77,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     return () => {
       newSocket.close();
     };
-  }, [user]);
+  }, [user, mounted]);
 
   const value = {
     socket,

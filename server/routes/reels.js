@@ -1,5 +1,6 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
+import mongoose from 'mongoose';
 import Reel from '../models/Reel.js';
 import User from '../models/User.js';
 import { auth, optionalAuth } from '../middleware/auth.js';

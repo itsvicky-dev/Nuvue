@@ -8,7 +8,6 @@ import { Sidebar } from '@/components/Layout/Sidebar';
 import { MobileNavbar } from '@/components/Layout/MobileNavbar';
 import { Heart, MessageCircle, User, UserPlus, Settings } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import NotificationPermission from '@/components/NotificationPermission';
 import NotificationSettings from '@/components/NotificationSettings';
 
 interface Notification {
@@ -368,9 +367,6 @@ export default function NotificationsPage() {
                 </button>
               </div>
             </div>
-
-            {/* Notification Permission */}
-            <NotificationPermission />
 
             {/* Filter Tabs */}
             <div className="mb-6">

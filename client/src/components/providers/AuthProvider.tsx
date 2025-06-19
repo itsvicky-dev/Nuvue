@@ -35,6 +35,7 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   updateUser: (userData: Partial<User>) => void;
+  reactivateAccount: (identifier: string, password: string) => Promise<void>;
 }
 
 interface RegisterData {
@@ -57,9 +58,16 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
     const token = localStorage.getItem('token');
     if (token) {
       api.setToken(token);
@@ -67,14 +75,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [mounted]);
 
   const fetchUser = async () => {
     try {
       const response = await api.get('/auth/me');
       setUser(response.data.user);
     } catch (error) {
-      localStorage.removeItem('token');
+      if (mounted) {
+        localStorage.removeItem('token');
+      }
       api.removeToken();
     } finally {
       setIsLoading(false);
@@ -86,12 +96,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await api.post('/auth/login', { identifier, password });
       const { token, user } = response.data;
       
-      localStorage.setItem('token', token);
+      if (mounted) {
+        localStorage.setItem('token', token);
+      }
       api.setToken(token);
       setUser(user);
       
       router.push('/');
     } catch (error: any) {
+      // Check if account is deactivated
+      if (error.response?.status === 403 && error.response?.data?.accountDeactivated) {
+        const deactivatedError = new Error(error.response.data.message);
+        (deactivatedError as any).accountDeactivated = true;
+        (deactivatedError as any).userInfo = {
+          userId: error.response.data.userId,
+          username: error.response.data.username,
+          email: error.response.data.email
+        };
+        throw deactivatedError;
+      }
       throw new Error(error.response?.data?.message || 'Login failed');
     }
   };
@@ -101,7 +124,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await api.post('/auth/register', data);
       const { token, user } = response.data;
       
-      localStorage.setItem('token', token);
+      if (mounted) {
+        localStorage.setItem('token', token);
+      }
       api.setToken(token);
       setUser(user);
       
@@ -112,10 +137,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    if (mounted) {
+      localStorage.removeItem('token');
+    }
     api.removeToken();
     setUser(null);
     router.push('/login');
+  };
+
+  const reactivateAccount = async (identifier: string, password: string) => {
+    try {
+      const response = await api.post('/auth/reactivate', { identifier, password });
+      const { token, user } = response.data;
+      
+      if (mounted) {
+        localStorage.setItem('token', token);
+      }
+      api.setToken(token);
+      setUser(user);
+      
+      router.push('/');
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Reactivation failed');
+    }
   };
 
   const updateUser = (userData: Partial<User>) => {
@@ -129,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     register,
     logout,
     updateUser,
+    reactivateAccount,
   };
 
   return (

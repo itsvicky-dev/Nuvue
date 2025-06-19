@@ -80,21 +80,20 @@ if (process.env.NODE_ENV === 'development') {
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // limit each IP to 300 requests per windowMs
+  max: 1000, // limit each IP to 300 requests per windowMs
   message: 'Too many requests from this IP, please try again later.'
 });
 
 // More lenient rate limiting for uploads
 const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 50 uploads per windowMs
+  max: 150, // limit each IP to 50 uploads per windowMs
   message: 'Too many upload requests from this IP, please try again later.'
 });
 
 app.use('/api/', limiter);
 app.use('/api/upload', uploadLimiter);
 app.use('/api/posts', uploadLimiter);
-app.use('/api/reels', uploadLimiter);
 app.use('/api/stories', uploadLimiter);
 
 // Body parsing middleware

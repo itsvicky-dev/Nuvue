@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useToast } from '@/components/ui/Toaster';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, RefreshCw } from 'lucide-react';
 
-export default function LoginPage() {
+export default function ReactivatePage() {
   const [formData, setFormData] = useState({
     identifier: '',
     password: '',
@@ -15,9 +15,22 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { reactivateAccount } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Pre-fill identifier if coming from login page
+  useEffect(() => {
+    const username = searchParams.get('username');
+    const email = searchParams.get('email');
+    if (username || email) {
+      setFormData(prev => ({
+        ...prev,
+        identifier: username || email || ''
+      }));
+    }
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -31,26 +44,15 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(formData.identifier, formData.password);
+      await reactivateAccount(formData.identifier, formData.password);
       toast({
         title: 'Welcome back!',
-        description: 'You have successfully logged in.',
+        description: 'Your account has been reactivated successfully.',
         type: 'success'
       });
     } catch (error: any) {
-      // Check if account is deactivated
-      if ((error as any).accountDeactivated) {
-        const userInfo = (error as any).userInfo;
-        const params = new URLSearchParams();
-        if (userInfo?.username) params.set('username', userInfo.username);
-        if (userInfo?.email) params.set('email', userInfo.email);
-        
-        router.push(`/reactivate?${params.toString()}`);
-        return;
-      }
-      
       toast({
-        title: 'Login failed',
+        title: 'Reactivation failed',
         description: error.message,
         type: 'error'
       });
@@ -66,9 +68,15 @@ export default function LoginPage() {
           <div className="mx-auto h-12 w-auto flex justify-center">
             <h1 className="text-3xl font-bold text-gradient">Nuvue</h1>
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-            Sign in to your account
-          </h2>
+          <div className="mt-6 text-center">
+            <RefreshCw className="mx-auto h-12 w-12 text-ig-blue mb-4" />
+            <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">
+              Reactivate Your Account
+            </h2>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Your account is currently deactivated. Enter your credentials to reactivate it.
+            </p>
+          </div>
         </div>
         
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -118,37 +126,43 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="text-sm">
-              <Link
-                href="/forgot-password"
-                className="font-medium text-ig-blue hover:text-ig-blue-hover"
-              >
-                Forgot your password?
-              </Link>
-            </div>
-          </div>
-
           <div>
             <button
               type="submit"
               disabled={isLoading}
-              className="btn-primary w-full"
+              className="btn-primary w-full flex items-center justify-center"
             >
-              {isLoading ? 'Signing in...' : 'Sign in'}
+              {isLoading ? (
+                <>
+                  <RefreshCw className="animate-spin -ml-1 mr-3 h-5 w-5" />
+                  Reactivating...
+                </>
+              ) : (
+                'Reactivate Account'
+              )}
             </button>
           </div>
 
-          <div className="text-center">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Don't have an account?{' '}
+          <div className="text-center space-y-2">
+            <div>
               <Link
-                href="/register"
-                className="font-medium text-ig-blue hover:text-ig-blue-hover"
+                href="/forgot-password"
+                className="text-sm font-medium text-ig-blue hover:text-ig-blue-hover"
               >
-                Sign up
+                Forgot your password?
               </Link>
-            </span>
+            </div>
+            <div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                Want to try a different account?{' '}
+                <Link
+                  href="/login"
+                  className="font-medium text-ig-blue hover:text-ig-blue-hover"
+                >
+                  Back to login
+                </Link>
+              </span>
+            </div>
           </div>
         </form>
       </div>

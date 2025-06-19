@@ -23,15 +23,25 @@ export function useTheme() {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('system');
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+  const [mounted, setMounted] = useState(false);
+
+  // Ensure component is mounted before accessing browser APIs
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    
     const stored = localStorage.getItem('theme') as Theme;
     if (stored) {
       setTheme(stored);
     }
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
+    if (!mounted) return;
+    
     const updateTheme = () => {
       const root = window.document.documentElement;
       
@@ -52,11 +62,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       mediaQuery.addEventListener('change', updateTheme);
       return () => mediaQuery.removeEventListener('change', updateTheme);
     }
-  }, [theme]);
+  }, [theme, mounted]);
 
   const handleSetTheme = (newTheme: Theme) => {
     setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
+    if (mounted) {
+      localStorage.setItem('theme', newTheme);
+    }
   };
 
   const value = {
@@ -64,6 +76,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setTheme: handleSetTheme,
     resolvedTheme,
   };
+
+  // Don't render children until mounted to prevent hydration mismatch
+  if (!mounted) {
+    return (
+      <ThemeContext.Provider value={value}>
+        {children}
+      </ThemeContext.Provider>
+    );
+  }
 
   return (
     <ThemeContext.Provider value={value}>
