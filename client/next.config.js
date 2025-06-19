@@ -23,17 +23,23 @@ const nextConfig = {
       },
     ],
   },
-  // Server Actions are enabled by default in Next.js 14
-  // experimental.serverActions option removed as it's deprecated
   
   // Optimize build process
   swcMinify: true,
   
-  // Configure output for better deployment
-  output: 'standalone',
-  
-  // Reduce bundle size
+  // Fix build trace collection issues
   experimental: {
+    // Disable build trace collection to prevent stack overflow
+    outputFileTracingRoot: undefined,
+    outputFileTracingExcludes: {
+      '*': [
+        'node_modules/@swc/core-linux-x64-gnu',
+        'node_modules/@swc/core-linux-x64-musl',
+        'node_modules/@esbuild/linux-x64',
+        'node_modules/sharp',
+        '.git/**/*',
+      ],
+    },
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 }
