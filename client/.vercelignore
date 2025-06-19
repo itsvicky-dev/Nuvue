@@ -11,9 +11,12 @@ out
 build
 dist
 
-# Dependencies
+# Dependencies that can cause build trace issues
 node_modules
 .pnpm-store
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Logs
 logs
@@ -40,7 +43,29 @@ Thumbs.db
 # Testing
 coverage
 .nyc_output
+jest.config.*
+cypress
+cypress.json
+
+# Documentation
+README.md
+*.md
+docs/
 
 # Temporary files
 *.tmp
 *.temp
+
+# TypeScript
+*.tsbuildinfo
+
+# ESLint
+.eslintcache
+
+# Storybook
+.storybook
+storybook-static
+
+# Miscellaneous files that can cause issues
+*.map
+*.d.ts.map
