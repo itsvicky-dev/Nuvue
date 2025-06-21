@@ -9,12 +9,18 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'ig-blue': '#0095f6',
-        'ig-blue-hover': '#1877f2',
+        'ig-blue': '#8b5cf6', // Changed from Instagram blue to purple
+        'ig-blue-hover': '#7c3aed', // Changed hover color to darker purple
         'ig-gray': '#8e8e8e',
         'ig-gray-light': '#fafafa',
         'ig-gray-border': '#dbdbdb',
         'ig-red': '#ed4956',
+        // New purple theme colors
+        'primary': '#8b5cf6',
+        'primary-hover': '#7c3aed',
+        'primary-light': '#c4b5fd',
+        'secondary': '#d946ef',
+        'accent': '#f59e0b',
         // Dark mode colors
         'dark-bg': '#000000',
         'dark-surface': '#1a1a1a',

@@ -8,7 +8,7 @@ import { getProfilePictureUrl, getImageUrl } from '@/utils/urls';
 import { Sidebar } from '@/components/Layout/Sidebar';
 import { MobileNavbar } from '@/components/Layout/MobileNavbar';
 import { FollowersModal } from '@/components/Profile/FollowersModal';
-import { PostModal } from '@/components/Profile/PostModal';
+import { FeedStylePostView } from '@/components/Profile/FeedStylePostView';
 import {
   Grid,
   Heart,
@@ -67,8 +67,8 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
   const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
-  const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
+  const [showFeedView, setShowFeedView] = useState(false);
   const [followers, setFollowers] = useState<any[]>([]);
   const [following, setFollowing] = useState<any[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -262,12 +262,16 @@ export default function ProfilePage() {
   const handlePostClick = (index: number) => {
     setSelectedPostIndex(index);
     setSelectedPost(posts[index]);
-    setActiveTab('post-detail');
+    setShowFeedView(true);
   };
 
   const handlePostDeleted = (postId: string) => {
     setPosts(prev => prev.filter(post => post._id !== postId));
-    setIsPostModalOpen(false);
+    setShowFeedView(false);
+  };
+
+  const handleCloseFeedView = () => {
+    setShowFeedView(false);
   };
 
   // Allow viewing profiles even when not logged in (for public profiles)
@@ -447,8 +451,8 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Tabs - Only show for main content tabs and when content is viewable */}
-            {!['followers', 'following', 'post-detail'].includes(activeTab) && canViewContent() && (
+            {/* Tabs - Only show for main content tabs and when content is viewable and not in feed view */}
+            {!['followers', 'following', 'post-detail'].includes(activeTab) && canViewContent() && !showFeedView && (
               <div className="mb-6">
                 <div className="border-b border-gray-200 dark:border-gray-700">
                   <nav className="flex space-x-8">
@@ -541,8 +545,19 @@ export default function ProfilePage() {
               </div>
             )}
 
+            {/* Feed View */}
+            {showFeedView && (
+              <FeedStylePostView
+                isOpen={true}
+                onClose={handleCloseFeedView}
+                posts={posts}
+                initialPostIndex={selectedPostIndex}
+                onPostDeleted={handlePostDeleted}
+              />
+            )}
+
             {/* Posts Grid */}
-            {activeTab === 'posts' && canViewContent() && (
+            {activeTab === 'posts' && canViewContent() && !showFeedView && (
               <div>
                 {posts.length > 0 ? (
                   <div className="grid grid-cols-3 gap-1 md:gap-4">
@@ -619,7 +634,7 @@ export default function ProfilePage() {
             )}
 
             {/* Reels Grid */}
-            {activeTab === 'reels' && canViewContent() && (
+            {activeTab === 'reels' && canViewContent() && !showFeedView && (
               <div>
                 {reels.length > 0 ? (
                   <div className="grid grid-cols-3 gap-1 md:gap-4">
@@ -694,7 +709,7 @@ export default function ProfilePage() {
             )}
 
             {/* Saved Posts and Reels */}
-            {activeTab === 'saved' && profile?.isOwnProfile && canViewContent() && (
+            {activeTab === 'saved' && profile?.isOwnProfile && canViewContent() && !showFeedView && (
               <div>
                 {(savedPosts.length > 0 || savedReels.length > 0) ? (
                   <div className="space-y-8">
@@ -804,7 +819,7 @@ export default function ProfilePage() {
             )}
 
             {/* Tagged tab placeholder */}
-            {activeTab === 'tagged' && canViewContent() && (
+            {activeTab === 'tagged' && canViewContent() && !showFeedView && (
               <div className="text-center py-12">
                 <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Tag size={24} className="text-gray-400" />
@@ -1062,13 +1077,7 @@ export default function ProfilePage() {
         type="following"
       />
 
-      <PostModal
-        isOpen={isPostModalOpen}
-        onClose={() => setIsPostModalOpen(false)}
-        posts={posts}
-        initialPostIndex={selectedPostIndex}
-        onPostDeleted={handlePostDeleted}
-      />
+
     </div>
   );
 }

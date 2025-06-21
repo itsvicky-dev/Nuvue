@@ -74,15 +74,17 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // Transform reels to include like status and fix video URLs
     const transformedReels = reels.map(reel => {
-      const reelObj = reel.toObject();
+      // Since we're using aggregation, reel is already a plain object
       return {
-        ...reelObj,
+        ...reel,
         video: {
-          ...reelObj.video,
-          url: fixVideoUrl(reelObj.video.url, req)
+          ...reel.video,
+          url: fixVideoUrl(reel.video.url, req)
         },
-        isLikedBy: req.userId ? reel.isLikedBy(req.userId) : false,
-        isSaved: req.userId ? false : false // Will be handled by checking user's savedReels
+        isLikedBy: req.userId ? reel.likes?.some(like => 
+          like.user?.toString() === req.userId || like.toString() === req.userId
+        ) : false,
+        isSaved: false // Will be handled by checking user's savedReels
       };
     });
 

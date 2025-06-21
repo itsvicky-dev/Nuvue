@@ -182,10 +182,10 @@ export function ReelsViewer({ reels, currentIndex, onNext, onPrevious, onIndexCh
   if (!currentReel) return null;
 
   return (
-    <div ref={containerRef} className="h-screen bg-black relative overflow-hidden">
+    <div ref={containerRef} className="max-h-[90vh] bg-gray-50 dark:bg-dark-bg relative overflow-hidden">
       {/* Video Container */}
       <div className="flex items-center justify-center h-full">
-        <div className="relative aspect-[9/16] h-full max-w-[calc(100vh*9/16)] mx-auto">
+        <div className="relative aspect-[9/16] h-[90vh] max-w-[calc(100vh*9/16)] mx-auto">
           <video
             ref={videoRef}
             src={currentReel.video.url}
@@ -319,7 +319,7 @@ export function ReelsViewer({ reels, currentIndex, onNext, onPrevious, onIndexCh
       </div>
 
       {/* Navigation Arrows */}
-      <div className="absolute right-4 bottom-20 flex flex-col space-y-2">
+      <div className="absolute right-4 bottom-7 flex flex-col space-y-2">
         <button
           onClick={onPrevious}
           disabled={currentIndex === 0}

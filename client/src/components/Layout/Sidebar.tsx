@@ -19,6 +19,7 @@ import {
   LogOut,
   Sun,
   Moon,
+  Monitor,
   Play
 } from 'lucide-react';
 
@@ -37,6 +38,28 @@ export function Sidebar() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { socket } = useSocket();
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const cycleTheme = () => {
+    if (theme === 'system') {
+      setTheme('light');
+    } else if (theme === 'light') {
+      setTheme('dark');
+    } else {
+      setTheme('system');
+    }
+  };
+
+  const getThemeIcon = () => {
+    if (theme === 'system') return Monitor;
+    if (theme === 'light') return Sun;
+    return Moon;
+  };
+
+  const getThemeLabel = () => {
+    if (theme === 'system') return 'System theme';
+    if (theme === 'light') return 'Light mode';
+    return 'Dark mode';
+  };
 
   // Fetch initial unread count
   useEffect(() => {
@@ -79,10 +102,13 @@ export function Sidebar() {
     <div className="fixed left-0 top-0 z-40 h-screen w-64 bg-white dark:bg-dark-surface border-r border-gray-200 dark:border-dark-border">
       <div className="flex flex-col h-full">
         {/* Logo */}
-        <div className="p-6">
-          <Link href="/" className="text-2xl font-bold text-gradient">
-            Nuvue
-          </Link>
+        <div className="flex mx-2">
+          <img src="/assets/images/logo.svg" alt="" width={50} />
+          <div className="p-6">
+            <Link href="/" className="text-2xl font-bold text-purple-gradient hover:scale-105 transition-transform duration-200">
+              Nuvue
+            </Link>
+          </div>
         </div>
 
         {/* Navigation */}
@@ -96,16 +122,16 @@ export function Sidebar() {
                     href={item.href}
                     className={`
                       flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors relative
-                      ${isActive 
-                        ? 'bg-gray-100 dark:bg-gray-800 font-semibold' 
+                      ${isActive
+                        ? 'bg-gray-100 dark:bg-gray-800 font-semibold'
                         : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                       }
                     `}
                   >
                     <div className="relative">
-                      <item.icon 
-                        size={24} 
-                        className={isActive ? 'fill-current' : ''} 
+                      <item.icon
+                        size={24}
+                        className={isActive ? 'fill-current' : ''}
                       />
                       {item.href === '/notifications' && unreadCount > 0 && (
                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
@@ -128,7 +154,7 @@ export function Sidebar() {
                 className={`
                   flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors
                   ${pathname === `/${user?.username}`
-                    ? 'bg-gray-100 dark:bg-gray-800 font-semibold' 
+                    ? 'bg-gray-100 dark:bg-gray-800 font-semibold'
                     : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                   }
                 `}
@@ -145,12 +171,15 @@ export function Sidebar() {
           <div className="space-y-2">
             {/* Theme Toggle */}
             <button
-              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-              className="flex items-center space-x-3 px-3 py-3 w-full rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+              onClick={cycleTheme}
+              className="flex items-center space-x-3 px-3 py-3 w-full rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
             >
-              {resolvedTheme === 'dark' ? <Sun size={24} /> : <Moon size={24} />}
+              {(() => {
+                const IconComponent = getThemeIcon();
+                return <IconComponent size={24} className="group-hover:scale-110 transition-transform duration-200" />;
+              })()}
               <span className="text-gray-900 dark:text-white">
-                {resolvedTheme === 'dark' ? 'Light mode' : 'Dark mode'}
+                {getThemeLabel()}
               </span>
             </button>
 

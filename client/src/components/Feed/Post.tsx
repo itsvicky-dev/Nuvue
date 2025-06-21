@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { postsApi } from '@/lib/api';
 import { useToast } from '../ui/Toaster';
 import { getImageUrl, getProfilePictureUrl } from '@/utils/urls';
+import { CustomVideoPlayer } from '../ui/CustomVideoPlayer';
 
 interface PostProps {
   post: {
@@ -154,10 +155,12 @@ export function Post({ post }: PostProps) {
       {/* Post Media */}
       <div className="relative aspect-square">
         {post.media[0]?.type === 'video' ? (
-          <video
+          <CustomVideoPlayer
             src={getImageUrl(post.media[0].url)}
-            controls
-            className="w-full h-full object-cover"
+            className="w-full h-full"
+            autoPlay={false}
+            muted={true}
+            loop={true}
           />
         ) : (
           <>

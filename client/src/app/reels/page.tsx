@@ -6,6 +6,7 @@ import { ReelsViewer } from '@/components/Reels/ReelsViewer';
 import { reelsApi } from '@/lib/api';
 import { Sidebar } from '@/components/Layout/Sidebar';
 import { MobileNavbar } from '@/components/Layout/MobileNavbar';
+import { Video } from 'lucide-react';
 
 export default function ReelsPage() {
   const [reels, setReels] = useState<any[]>([]);
@@ -85,19 +86,7 @@ export default function ReelsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reels</h1>
         <div className="flex items-center space-x-2">
-          <svg
-            className="w-6 h-6 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-            />
-          </svg>
+          <Video className="w-6 h-6 text-gray-700 dark:text-gray-300" />
         </div>
       </div>
     </div>
@@ -105,7 +94,7 @@ export default function ReelsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-black">
+      <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
         <div className="flex">
           {/* Sidebar for desktop */}
           <div className="hidden md:block">
@@ -136,7 +125,7 @@ export default function ReelsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-black">
+      <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
         <div className="flex">
           {/* Sidebar for desktop */}
           <div className="hidden md:block">
@@ -187,7 +176,7 @@ export default function ReelsPage() {
 
   if (reels.length === 0) {
     return (
-      <div className="min-h-screen bg-black">
+      <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
         <div className="flex">
           {/* Sidebar for desktop */}
           <div className="hidden md:block">
@@ -237,7 +226,7 @@ export default function ReelsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
       <div className="flex">
         {/* Sidebar for desktop */}
         <div className="hidden md:block">
@@ -246,14 +235,16 @@ export default function ReelsPage() {
 
         {/* Main content */}
         <main className="flex-1 md:ml-64">
-          <ReelsHeader />
-          <ReelsViewer
-            reels={reels}
-            currentIndex={currentIndex}
-            onNext={handleNext}
-            onPrevious={handlePrevious}
-            onIndexChange={setCurrentIndex}
-          />
+          <div className="max-w-4xl mx-auto py-4 px-4">
+            <ReelsHeader />
+            <ReelsViewer
+              reels={reels}
+              currentIndex={currentIndex}
+              onNext={handleNext}
+              onPrevious={handlePrevious}
+              onIndexChange={setCurrentIndex}
+            />
+          </div>
         </main>
       </div>
 
