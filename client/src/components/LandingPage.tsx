@@ -66,28 +66,28 @@ const getThemeClasses = (theme: 'light' | 'dark') => ({
   bgPrimary: theme === 'dark' ? 'bg-black' : 'bg-white',
   bgSecondary: theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100',
   bgTertiary: theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200',
-  
+
   // Text colors
   textPrimary: theme === 'dark' ? 'text-white' : 'text-gray-900',
   textSecondary: theme === 'dark' ? 'text-gray-300' : 'text-gray-600',
   textTertiary: theme === 'dark' ? 'text-gray-400' : 'text-gray-500',
   textMuted: theme === 'dark' ? 'text-gray-500' : 'text-gray-400',
-  
+
   // Border colors
   borderPrimary: theme === 'dark' ? 'border-gray-800' : 'border-gray-200',
   borderSecondary: theme === 'dark' ? 'border-gray-700' : 'border-gray-300',
-  
+
   // Glass/backdrop effects
   glassEffect: theme === 'dark' ? 'bg-gray-900/50 backdrop-blur-xl border border-gray-800/50' : 'bg-white/50 backdrop-blur-xl border border-gray-200/50',
   glassEffectStrong: theme === 'dark' ? 'bg-gray-900/80 backdrop-blur-xl border border-gray-800/50' : 'bg-white/80 backdrop-blur-xl border border-gray-200/50',
-  
+
   // Navigation background
   navBg: theme === 'dark' ? 'bg-black/20 backdrop-blur-2xl' : 'bg-white/20 backdrop-blur-2xl',
-  
+
   // Shadows
   shadowColor: theme === 'dark' ? 'bg-black/40' : 'bg-gray-900/20',
   shadowColorStrong: theme === 'dark' ? 'bg-black/80' : 'bg-gray-900/40',
-  
+
   // Sticker effects
   stickerShadow: theme === 'dark' ? 'bg-black/30' : 'bg-gray-900/20',
   stickerBg: theme === 'dark' ? 'bg-white/10' : 'bg-gray-900/10',
@@ -95,9 +95,9 @@ const getThemeClasses = (theme: 'light' | 'dark') => ({
   stickerHighlight: theme === 'dark' ? 'from-white/20' : 'from-gray-900/20',
   stickerStripe: theme === 'dark' ? 'via-white/40' : 'via-gray-900/40',
   stickerStripeBottom: theme === 'dark' ? 'via-white/30' : 'via-gray-900/30',
-  
+
   // Gradient backgrounds for sections
-  heroGradient: theme === 'dark' 
+  heroGradient: theme === 'dark'
     ? 'bg-gradient-to-br from-purple-900/30 via-black to-pink-900/30'
     : 'bg-gradient-to-br from-purple-100/30 via-white to-pink-100/30',
   featuresGradient: theme === 'dark'
@@ -112,17 +112,17 @@ const getThemeClasses = (theme: 'light' | 'dark') => ({
   footerGradient: theme === 'dark'
     ? 'bg-gradient-to-t from-black via-gray-900/50 to-transparent'
     : 'bg-gradient-to-t from-white via-gray-100/50 to-transparent',
-  
+
   // Image overlays
-  imageOverlay: theme === 'dark' 
+  imageOverlay: theme === 'dark'
     ? 'bg-gradient-to-t from-black/80 via-transparent to-transparent'
     : 'bg-gradient-to-t from-white/80 via-transparent to-transparent',
-  
+
   // Button backgrounds for floating elements
   floatingBtnBg: theme === 'dark' ? 'bg-white/20' : 'bg-gray-900/20',
   floatingBtnBorder: theme === 'dark' ? 'border-white/30' : 'border-gray-900/30',
   floatingBtnHover: theme === 'dark' ? 'hover:bg-white/30' : 'hover:bg-gray-900/30',
-  
+
   // Footer social buttons
   socialBtnBg: theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-200/50',
 });
@@ -444,7 +444,7 @@ const StickerWord = ({
         <div className={`absolute top-2 left-4 right-4 h-1 bg-gradient-to-r from-transparent to-transparent rounded-full ${themeClasses.stickerStripe}`} />
 
         {/* Text */}
-        <span className={`relative text-4xl md:text-6xl lg:text-7xl font-black drop-shadow-lg ${theme === 'dark' ? `bg-gradient-to-r ${gradient} bg-clip-text text-transparent` : themeClasses.textPrimary}`}>
+        <span className={`relative text-4xl md:text-6xl lg:text-7xl font-black bg-gradient-to-r ${gradient} bg-clip-text text-transparent drop-shadow-lg`}>
           {word}
         </span>
 
@@ -600,7 +600,7 @@ const GraffitiText = ({
       </div>
 
       {/* Main text with gradient */}
-      <span className={`relative ${styleClasses[style]} drop-shadow-2xl ${theme === 'dark' ? 'bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent' : 'text-gray-900'}`}>
+      <span className={`relative ${styleClasses[style]} bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent drop-shadow-2xl`}>
         {text}
       </span>
 
@@ -667,7 +667,7 @@ export default function LandingPage() {
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center space-x-3">
               <div className="relative">
-                <img src="/assets/images/logo.svg" alt="" width={50}/>
+                <img src="/assets/images/logo.svg" alt="" width={50} />
                 <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl blur opacity-30 animate-pulse" />
               </div>
               <span className={`text-2xl font-bold bg-gradient-to-r ${theme === 'dark' ? 'from-white to-gray-300' : 'from-gray-900 to-gray-600'} bg-clip-text text-transparent`}>
@@ -701,7 +701,7 @@ export default function LandingPage() {
                   <Moon className="w-5 h-5 text-purple-400" />
                 )}
               </button>
-              
+
               <Link
                 href="/login"
                 className={`transition-colors duration-300 px-4 py-2 ${themeClasses.textSecondary} hover:${themeClasses.textPrimary.replace('text-', '')}`}
@@ -739,7 +739,7 @@ export default function LandingPage() {
         <div
           className="absolute inset-0 opacity-20"
           style={{
-            backgroundImage: theme === 'dark' 
+            backgroundImage: theme === 'dark'
               ? `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0)`
               : `radial-gradient(circle at 1px 1px, rgba(0,0,0,0.15) 1px, transparent 0)`,
             backgroundSize: '50px 50px',
@@ -1178,7 +1178,7 @@ export default function LandingPage() {
                     <Link
                       href="/register"
                       className='flex items-center'
-                      >
+                    >
                       <span>Create Account</span>
                       <ArrowRight className="w-5 h-5 ml-2" />
                     </Link>
