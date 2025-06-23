@@ -9,7 +9,14 @@ export const metadata: Metadata = {
   title: 'nuvue',
   description: 'A full-featured Instagram clone built with Next.js',
   keywords: ['Instagram', 'Social Media', 'Photos', 'Sharing'],
-}
+icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' }
+    ],
+    apple: '/apple-touch-icon.png',
+    shortcut: '/favicon.ico'
+  }}
 
 export default function RootLayout({
   children,
